@@ -100,9 +100,10 @@ void Gimbal_to_Chassis::Data_send()
 
     ui_list.aim_x = vision.getAimX();
     ui_list.aim_y = vision.getAimY();
-
+		i_mu.yaw = BSP::IMU::imu.getAddYaw();
+		i_mu.pitch = BSP::IMU::imu.getPitch();
     // 计算总数据长度
-    len = sizeof(direction) + sizeof(chassis_mode) + sizeof(ui_list) + 1; //+1帧头
+    len = sizeof(direction) + sizeof(chassis_mode) + sizeof(ui_list) + sizeof(i_mu) + 1; //+1帧头
 
     // 使用临时指针将数据拷贝到缓冲区
     auto temp_ptr = buffer;
@@ -118,7 +119,7 @@ void Gimbal_to_Chassis::Data_send()
     memcpy_safe(direction);    // 序列化方向数据
     memcpy_safe(chassis_mode); // 序列化模式数据
     memcpy_safe(ui_list);      // 序列化UI状态
-
+		memcpy_safe(i_mu);
     // 发送数据
     HAL_UART_Transmit_DMA(&huart6, buffer, len);
 }

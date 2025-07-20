@@ -60,6 +60,12 @@ class Gimbal_to_Chassis
         uint16_t booster_heat_max;
         uint16_t booster_now_heat;
     };
+		
+		struct __attribute__((packed)) IMU //IMU数据
+		{
+			float yaw;
+			float pitch;
+		};
 
     uint8_t buffer[20];
     uint8_t rx_buffer[8];
@@ -68,7 +74,8 @@ class Gimbal_to_Chassis
     ChassisMode chassis_mode;
     UiList ui_list;
     RxRefree rx_refree;
-
+		IMU i_mu;
+		
   public:
     void set_LX(double LX);
     void set_LY(double LY);
