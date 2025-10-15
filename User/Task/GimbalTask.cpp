@@ -73,7 +73,7 @@ void Gimbal::UpState()
         // 检测状态变化的上升沿（进入DISABLE状态）
         if (DM_state.getRisingEdge())
         {
-            BSP::Motor::DM::Motor4310.On(&hcan2, 1);
+            BSP::Motor::DM::Motor4310.On(&hcan1, 1);							
             osDelay(1);
         }
 
@@ -170,11 +170,11 @@ void Gimbal::pitchControl()
 
     if (Now_Status_Serial == GIMBAL::DISABLE)
     {
-        BSP::Motor::DM::Motor4310.ctrl_Motor(&hcan2, 1, 0, 0, 0, 0, 0);
+        BSP::Motor::DM::Motor4310.ctrl_Motor(&hcan1, 1, 0, 0, 0, 0, 0);
     }
     else
     {
-        BSP::Motor::DM::Motor4310.ctrl_Motor(&hcan2, 1, filter_tar_pitch * 0.0174532f, 0, DM_Kp, DM_Kd, 0);
+        BSP::Motor::DM::Motor4310.ctrl_Motor(&hcan1, 1, filter_tar_pitch * 0.0174532f, 0, DM_Kp, DM_Kd, 0);
     }
 }
 

@@ -5,21 +5,45 @@
 #include "../Task/EvenTask.hpp"
 namespace Communicat
 {
+// CAN通信相关定义
+#define CAN_GIMBAL_TO_CHASSIS_BASE_ID 0x400  // 云台->底盘基础ID
+#define CAN_G2C_FRAME1_ID 0x401              // 第一帧ID
+#define CAN_G2C_FRAME2_ID 0x402              // 第二帧ID
+#define CAN_G2C_FRAME3_ID 0x403              // 第三帧ID
+
+#define CAN_CHASSIS_TO_GIMBAL_BASE_ID 0x300  // 底盘->云台基础ID
+#define CAN_C2G_FRAME1_ID 0x301              // 第一帧ID
+#define CAN_C2G_FRAME2_ID 0x302              // 第二帧ID
+#define CAN_C2G_FRAME3_ID 0x303              // 第三帧ID
 class Gimbal_to_Chassis
 {
   public:
     void Data_send();
-
     void Receive();
-
+    void HandleCANMessage(uint32_t std_id, uint8_t* data);
   private:
     float CalcuGimbalToChassisAngle();
+    void ParseCANFrame(uint32_t std_id, uint8_t* data);
+    void ProcessReceivedData();
 
     uint8_t head = 0xA5; // 帧头
     uint8_t len;
     int16_t Init_Angle = 16.0f;
     int16_t target_offset_angle = 0;
-
+		// 帧配置结构
+    struct FrameConfig {
+        uint32_t id;
+        uint16_t offset;
+        uint8_t size;
+        bool* received_flag;
+    };
+    
+    // 帧配置数组
+    FrameConfig frame_configs[3] = {
+        {CAN_C2G_FRAME1_ID, 0, 8, &frame1_received},
+        {CAN_C2G_FRAME2_ID, 8, 8, &frame2_received},
+        {CAN_C2G_FRAME3_ID, 16, 7, &frame3_received}
+    };
     struct __attribute__((packed)) Direction // 方向结构体
     {
         uint8_t LX;
@@ -66,6 +90,16 @@ class Gimbal_to_Chassis
 			float yaw;
 			float pitch;
 		};
+    // CAN发送缓冲区
+    uint8_t can_tx_buffer[3][8]; // 3帧，每帧8字节
+    
+    // CAN接收相关
+    uint8_t can_rx_buffer[23]; // 16字节缓冲区用于重组数据
+    bool frame1_received = false;
+    bool frame2_received = false;
+    bool frame3_received = false;
+    uint32_t last_frame_time = 0;
+    static constexpr uint32_t FRAME_TIMEOUT = 50; // 50ms超时
 
     uint8_t buffer[20];
     uint8_t rx_buffer[8];
@@ -74,7 +108,7 @@ class Gimbal_to_Chassis
     ChassisMode chassis_mode;
     UiList ui_list;
     RxRefree rx_refree;
-		IMU i_mu;
+    IMU i_mu;
 		
   public:
     void set_LX(double LX);

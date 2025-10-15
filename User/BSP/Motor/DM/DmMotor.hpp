@@ -120,8 +120,6 @@ template <uint8_t N> class DMMotorBase : public MotorBase<N>
     {
         const auto &params = params_;
 
-        this->unit_data_[i].angle_Deg = this->unit_data_[i].angle_Rad * params_.rad_to_deg;
-
         this->unit_data_[i].angle_Rad = uint_to_float(feedback_[i].angle, params.P_MIN, params.P_MAX, 16);
 
         this->unit_data_[i].velocity_Rad = uint_to_float(feedback_[i].velocity, params.V_MIN, params.V_MAX, 12);
@@ -129,6 +127,8 @@ template <uint8_t N> class DMMotorBase : public MotorBase<N>
         this->unit_data_[i].torque_Nm = uint_to_float(feedback_[i].torque, params.T_MIN, params.T_MAX, 12);
 
         this->unit_data_[i].temperature_C = feedback_[i].T_Mos;
+
+        this->unit_data_[i].angle_Deg = this->unit_data_[i].angle_Rad * params_.rad_to_deg;
 
         double lastData = this->unit_data_[i].last_angle;
         double Data = this->unit_data_[i].angle_Deg;
@@ -161,15 +161,13 @@ template <uint8_t N> class DMMotorBase : public MotorBase<N>
         {
             if (received_id == init_address + recv_idxs_[i])
             {
-                memcpy(&feedback_[i], pData, sizeof(DMMotorfeedback));
-
-                feedback_->id = pData[0] & 0xF0;
-                feedback_->err = pData[0] & 0xF;
-                feedback_->angle = (pData[1] << 8) | pData[2];
-                feedback_->velocity = (pData[3] << 4) | (pData[4] >> 4);
-                feedback_->torque = ((pData[4] & 0xF) << 8) | pData[5];
-                feedback_->T_Mos = pData[6];
-                feedback_->T_Rotor = pData[7];
+                feedback_[i].id = pData[0] >> 4;
+                feedback_[i].err = pData[0] & 0x0F;
+                feedback_[i].angle = (pData[1] << 8) | pData[2];
+                feedback_[i].velocity = (pData[3] << 4) | (pData[4] >> 4);
+                feedback_[i].torque = ((pData[4] & 0xF) << 8) | pData[5];
+                feedback_[i].T_Mos = pData[6];
+                feedback_[i].T_Rotor = pData[7];
 
                 Configure(i);
 
@@ -361,6 +359,7 @@ template <uint8_t N> class J4310 : public DMMotorBase<N>
      *
      * @param Init_id 初始ID
      * @param ids 电机ID列表
+     * @param send_idxs_ 电机发送ID列表
      */
     J4310(uint16_t Init_id, const uint8_t (&ids)[N], const uint32_t (&send_idxs_)[N])
         : DMMotorBase<N>(Init_id, ids, send_idxs_, Parameters(-12.56, 12.56, -30, 30, -3, 3, 0.0, 500, 0.0, 5.0))
@@ -368,6 +367,28 @@ template <uint8_t N> class J4310 : public DMMotorBase<N>
     }
 };
 
+template <uint8_t N> class S2325 : public DMMotorBase<N>
+{
+  private:
+    // // 定义参数生成方法
+    // Parameters GetParameters() override
+    // {
+    //     return DMMotorBase<N>::CreateParams(-12.56, 12.56, -30, 30, -10, 10, 0.0, 500, 0.0, 5.0);
+    // }
+
+  public:
+    // 子类构造时传递参数
+    /**
+     * @brief dji电机构造函数
+     *
+     * @param Init_id 初始ID
+     * @param ids 电机ID列表
+     */
+    S2325(uint16_t Init_id, const uint8_t (&ids)[N], const uint32_t (&send_idxs_)[N])
+        : DMMotorBase<N>(Init_id, ids, send_idxs_, Parameters(-12.5, 12.5, -200, 200, -10, 10, 0.0, 500, 0.0, 5.0))
+    {
+    }
+};
 /**
  * @brief 创建实例时，模板填电机个数，构造函数共三个参数
  * 第一个是初始ID，
@@ -375,5 +396,6 @@ template <uint8_t N> class J4310 : public DMMotorBase<N>
  * 第三个是电机发送ID列表
  */
 inline J4310<1> Motor4310(0x00, {2}, {1});
+inline S2325<2> Motor2325(0x00, {1,2}, {0x201,0x202});
 
 } // namespace BSP::Motor::DM

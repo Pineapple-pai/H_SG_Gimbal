@@ -292,7 +292,7 @@ template <uint8_t N> class GM6020 : public DjiMotorBase<N>
  * 构造函数的第一个参数为初始ID，第二个参数为电机ID列表,第三个参数是发送的ID
  *
  */
-inline GM2006<1> Motor2006(0x200, {1}, 0x200);
+inline GM2006<1> Motor2006(0x200, {4}, 0x200);
 inline GM3508<2> Motor3508(0x200, {2, 3}, 0x200);
 inline GM6020<1> Motor6020(0x204, {1}, 0x1FE);
 

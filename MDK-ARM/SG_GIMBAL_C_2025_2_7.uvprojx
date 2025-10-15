@@ -811,6 +811,16 @@
               <FileType>8</FileType>
               <FilePath>..\User\BSP\Remote\Dbus\Dbus.cpp</FilePath>
             </File>
+            <File>
+              <FileName>DmMotor.hpp</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\User\BSP\Motor\DM\DmMotor.hpp</FilePath>
+            </File>
+            <File>
+              <FileName>DjiMotor.hpp</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\User\BSP\Motor\Dji\DjiMotor.hpp</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>

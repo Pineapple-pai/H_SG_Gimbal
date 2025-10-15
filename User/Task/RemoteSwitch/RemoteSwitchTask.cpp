@@ -50,13 +50,14 @@ void keyBoradUpdata()
 
     // 小陀螺切换
     auto Q = KeyBroad::Instance().getKeyToggle(KeyBroad::KEY_Q);
-
+    auto E = KeyBroad::Instance().getKeyToggle(KeyBroad::KEY_E);
     // 按住shift
-    auto SHITF = KeyBroad::Instance().getPress(KeyBroad::KEY_SHIFT);
-    shift = KeyBroad::Instance().getPress(KeyBroad::KEY_SHIFT);
+    auto SHIFT = KeyBroad::Instance().getPress(KeyBroad::KEY_SHIFT);
+    // shift = KeyBroad::Instance().getPress(KeyBroad::KEY_SHIFT);
+    shift = SHIFT;
     // 下降沿加减功率
     auto F = KeyBroad::Instance().getFallingEdge(KeyBroad::KEY_F);
-    auto V = KeyBroad::Instance().getFallingEdge(KeyBroad::KEY_V);
+    auto G = KeyBroad::Instance().getFallingEdge(KeyBroad::KEY_G);
 
     // 点击刷新
     auto CTRL = KeyBroad::Instance().getKeyClick(KeyBroad::KEY_CTRL);
@@ -88,18 +89,18 @@ void keyBoradUpdata()
     // 小陀螺
     if (Q)
         Gimbal_to_Chassis_Data.set_Rotating_vel(220);
-    else
+    else if (E)
         Gimbal_to_Chassis_Data.set_Rotating_vel(0);
 
-    // 按住就是shitf不是长按，不需要if
-    Gimbal_to_Chassis_Data.set_Shift(SHITF);
+    // 按住就是shift不是长按，不需要if
+    Gimbal_to_Chassis_Data.set_Shift(SHIFT);
 
     // 增加功率
     if (F)
         Gimbal_to_Chassis_Data.setPower(10);
 
     // 减功率
-    if (V)
+    if (G)
         Gimbal_to_Chassis_Data.setPower(-10);
 
     if (C)
@@ -137,13 +138,13 @@ void BoosterUpState()
     auto *remote = Mode::RemoteModeManager::Instance().getActiveController();
 
     // 点击开启发射机构
-    auto G = KeyBroad::Instance().getKeyClick(KeyBroad::KEY_G);
+    auto V = KeyBroad::Instance().getKeyClick(KeyBroad::KEY_V);
     auto B = KeyBroad::Instance().getKeyClick(KeyBroad::KEY_B);
 
     static bool booster_enabled = false;
 
-    // 按G键开启，按B键关闭
-    if (G || remote->isLaunchMode())
+    // 按V键开启，按B键关闭
+    if (V || remote->isLaunchMode())
         booster_enabled = true;
     if (B || remote->isStopMode())
         booster_enabled = false;

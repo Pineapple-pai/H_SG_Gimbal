@@ -25,3 +25,8 @@ extern TD Yaw_vel;
 
 extern Ude yaw_ude;
 
+extern Kpid_t Kpid_Friction_L_vel;
+extern Kpid_t Kpid_Friction_R_vel;
+
+extern Alg::LADRC::Adrc Adrc_Friction_L;
+extern Alg::LADRC::Adrc Adrc_Friction_R;

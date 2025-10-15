@@ -114,6 +114,11 @@ template <uint8_t N> class MotorBase
         return this->unit_data_[id - 1].velocity_Rpm;
     }
 
+    float getDmRpm(uint8_t id)
+    {
+        return this->unit_data_[id - 1].velocity_Rad * 60 / (2 * 3.14159);
+    }
+
     /**
      * @brief 获取电流值    单位：(A)
      *

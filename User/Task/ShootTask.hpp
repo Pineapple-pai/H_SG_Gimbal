@@ -5,9 +5,9 @@
 #include "../Algorithm/LADRC/Adrc.hpp"
 #include "../BSP/SimpleKey/SimpleKey.hpp"
 #include "../User/Algorithm/PID.hpp"
-
+#include "../User/Algorithm/LADRC/Adrc.hpp"
 #include "../User/BSP/DWT/DWT.hpp"
-
+#include "../APP/Variable.hpp"
 namespace TASK::Shoot
 {
 using namespace Alg::LADRC;
@@ -90,7 +90,7 @@ class Class_ShootFSM : public Class_FSM
     {
         fire_flag = flag;
     }
-
+    
   protected:
     // 初始化相关常量
 
@@ -117,18 +117,20 @@ class Class_ShootFSM : public Class_FSM
     float target_friction_L_torque = 0;
     float target_friction_R_torque = 0;
 
-    float target_friction_omega = 5900;
+    float target_friction_omega = 150;
     float target_fire_hz;
     float Max_dail_angle = 20.0f; // 拨盘最快频率
-    Class_JammingFSM JammingFMS;
+    float Motor_Friction_L_Out = 0.0f;
+    float Motor_Friction_R_Out = 0.0f;
+    Class_JammingFSM JammingFMS;  
 
     // 开火标志位
     uint8_t fire_flag = 0;
 
     APP::Heat_Detector::Class_FSM_Heat_Limit Heat_Limit;
     // 发射机构控制模式
-    Adrc adrc_friction_L_vel;
-    Adrc adrc_friction_R_vel;
+    // Adrc Adrc_Friction_L;
+    // Adrc Adrc_Friction_R;
     Adrc adrc_Dail_vel;
 
     Kpid_t Kpid_Dail_pos;
@@ -136,6 +138,14 @@ class Class_ShootFSM : public Class_FSM
 
     PID pid_Dail_pos;
     PID pid_Dail_vel;
+
+    // Kpid_t Kpid_Friction_L_vel;
+    PID pid_Motor_Friction_L_vel;
+
+    // Kpid_t Kpid_Friction_R_vel;
+    PID pid_Motor_Friction_R_vel;
+
+
 
     // 用于单发检测，获取上升沿判断是否击发子弹
     // BSP::Key::SimpleKey key_fire;

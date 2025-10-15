@@ -18,7 +18,6 @@
 
 #define SIZE 8
 uint8_t format[15];
-
 uint64_t i;
 
 Communicat::Gimbal_to_Chassis Gimbal_to_Chassis_Data;
@@ -34,7 +33,7 @@ void CommunicationTask(void *argument)
         Communicat::vision.Data_send();
         Communicat::vision.dataReceive();
         Gimbal_to_Chassis_Data.Data_send();
-        Gimbal_to_Chassis_Data.Receive();
+        // Gimbal_to_Chassis_Data.Receive();
 
         osDelay(int_time);
     }
@@ -100,28 +99,41 @@ void Gimbal_to_Chassis::Data_send()
 
     ui_list.aim_x = vision.getAimX();
     ui_list.aim_y = vision.getAimY();
-		i_mu.yaw = BSP::IMU::imu.getAddYaw();
-		i_mu.pitch = BSP::IMU::imu.getPitch();
+    i_mu.yaw = BSP::IMU::imu.getAddYaw();
+    i_mu.pitch = BSP::IMU::imu.getPitch();
     // 计算总数据长度
     len = sizeof(direction) + sizeof(chassis_mode) + sizeof(ui_list) + sizeof(i_mu) + 1; //+1帧头
-
+    uint8_t tx_data[23];
     // 使用临时指针将数据拷贝到缓冲区
-    auto temp_ptr = buffer;
+    auto temp_ptr = tx_data;
 
     *temp_ptr = head;
     temp_ptr++;
 
     const auto memcpy_safe = [&](const auto &data) {
-        std::memcpy(temp_ptr, &data, sizeof(data));
+        memcpy(temp_ptr, &data, sizeof(data));
         temp_ptr += sizeof(data);
     };
 
     memcpy_safe(direction);    // 序列化方向数据
     memcpy_safe(chassis_mode); // 序列化模式数据
     memcpy_safe(ui_list);      // 序列化UI状态
-		memcpy_safe(i_mu);
+    memcpy_safe(i_mu);
     // 发送数据
-    HAL_UART_Transmit_DMA(&huart6, buffer, len);
+    // HAL_UART_Transmit_DMA(&huart6, buffer, len);
+    // 分三帧通过CAN发送
+    // 第一帧: 8字节 (0-7)
+    memcpy(can_tx_buffer[0], tx_data, 8);
+    CAN::BSP::Can_Send(&hcan2, CAN_G2C_FRAME1_ID, can_tx_buffer[0], 0);
+    
+    // 第二帧: 8字节 (8-15)
+    memcpy(can_tx_buffer[1], tx_data + 8, 8);
+    CAN::BSP::Can_Send(&hcan2, CAN_G2C_FRAME2_ID, can_tx_buffer[1], 0);
+
+    // 第三帧: 7字节 (16-22)，最后一字节补0
+    memcpy(can_tx_buffer[2], tx_data + 16, 7);
+    can_tx_buffer[2][7] = 0; // 补0
+    CAN::BSP::Can_Send(&hcan2, CAN_G2C_FRAME3_ID, can_tx_buffer[2], 0);
 }
 
 void Gimbal_to_Chassis::Receive()
@@ -133,9 +145,67 @@ void Gimbal_to_Chassis::Receive()
         return;
 
     // 跳过帧头(2字节)，直接复制数据部分
-    std::memcpy(&rx_refree, rx_buffer, sizeof(rx_refree));
+    memcpy(&rx_refree, rx_buffer, sizeof(rx_refree));
 }
+void Gimbal_to_Chassis::HandleCANMessage(uint32_t std_id, uint8_t* data)
+{
+    ParseCANFrame(std_id, data);
+}
+void Gimbal_to_Chassis::ParseCANFrame(uint32_t std_id, uint8_t* data)
+{
+    uint32_t current_time = HAL_GetTick();
+    
+    // 检查超时，如果超时则重置接收状态
+    if (current_time - last_frame_time > FRAME_TIMEOUT) {
+        frame1_received = false;
+        frame2_received = false;
+				frame3_received = false;
+    }
+    last_frame_time = current_time;
+		
+    int idx = std_id - CAN_C2G_FRAME1_ID;
+    
+    if (idx >= 0 && idx < 3) {
+        uint16_t offsets[3] = {0, 8, 16};
+        uint8_t sizes[3] = {8, 8, 7};
+        bool* flags[3] = {&frame1_received, &frame2_received, &frame3_received};
+        
+        std::memcpy(can_rx_buffer + offsets[idx], data, sizes[idx]);
+        *(flags[idx]) = true;
+    }
+//    switch(std_id) {
+//        case CAN_C2G_FRAME1_ID:
+//            memcpy(can_rx_buffer, data, 8);
+//            frame1_received = true;
+//            break;
+//        case CAN_C2G_FRAME2_ID:
+//            memcpy(can_rx_buffer + 8, data, 8);
+//            frame2_received = true;
+//            break;
+//        case CAN_C2G_FRAME3_ID:
+//            memcpy(can_rx_buffer + 16, data, 7);
+//            frame3_received = true;
+//            break;
+//        default:
+//            return;
+//    }
 
+    // 如果两帧都接收完成，处理数据
+    if (frame1_received && frame2_received && frame3_received) {
+        ProcessReceivedData();
+        // 重置接收状态
+				frame1_received = frame2_received = frame3_received = false;
+    }
+}
+void Gimbal_to_Chassis::ProcessReceivedData()
+{
+    // 裁判系统数据帧头检查
+    if (can_rx_buffer[0] != 0x21 || can_rx_buffer[1] != 0x12)
+        return;
+
+    // 直接复制数据部分
+    memcpy(&rx_refree, can_rx_buffer, sizeof(rx_refree));
+}
 float Gimbal_to_Chassis::CalcuGimbalToChassisAngle()
 {
 
