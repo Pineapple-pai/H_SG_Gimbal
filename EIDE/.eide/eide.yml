@@ -184,7 +184,8 @@ targets:
         - .cmsis/include
         - ../MDK-ARM/RTE/_SG_GIMBAL_C_2025_2_7
       libList: []
-    excludeList: []
+    excludeList:
+      - ../User/BSP/Motor/Lk/Lk_motor.cpp
     toolchain: AC6
     toolchainConfigMap:
       AC6:
