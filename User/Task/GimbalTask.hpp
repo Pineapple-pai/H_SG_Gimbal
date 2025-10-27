@@ -15,7 +15,7 @@ namespace TASK::GIMBAL
 enum Gimbal_Status
 {
     DISABLE,
-    NORMOL,
+    NORMAL,
     VISION,
     KEYBOARD
 };
