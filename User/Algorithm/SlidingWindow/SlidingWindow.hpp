@@ -100,10 +100,6 @@ template <typename T, uint32_t MaxSize = 100> class SlidingWindowDetector
         count_ = 0;
         sum_ = 0;
     }
-    T getCount() const
-    {
-        return count_;
-    }
 
   private:
     uint32_t window_size_; // 窗口大小

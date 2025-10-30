@@ -142,8 +142,6 @@ void BoosterUpState()
     auto B = KeyBroad::Instance().getKeyClick(KeyBroad::KEY_B);
 
     static bool booster_enabled = false;
-    bool bothSwitchesUp = (BSP::Remote::dr16.switchLeft() == BSP::Remote::Dr16::Switch::UP) && 
-                          (BSP::Remote::dr16.switchRight() == BSP::Remote::Dr16::Switch::UP);
 
     // 按V键开启，按B键关闭
     if (V || remote->isLaunchMode())
@@ -164,10 +162,6 @@ void BoosterUpState()
     {
         TASK::Shoot::shoot_fsm.setNowStatus(TASK::Shoot::Booster_Status::AUTO);
     }
-     else if (bothSwitchesUp)
-     {
-        TASK::Shoot::shoot_fsm.setNowStatus(TASK::Shoot::Booster_Status::AUTO);
-     }
     else
     {
         TASK::Shoot::shoot_fsm.setNowStatus(TASK::Shoot::Booster_Status::AUTO);
@@ -176,9 +170,6 @@ void BoosterUpState()
 void GimbalUpState()
 {
     auto *remote = Mode::RemoteModeManager::Instance().getActiveController();
-    // 检查遥控器左右拨杆是否都处于UP位置
-    bool bothSwitchesUp = (BSP::Remote::dr16.switchLeft() == BSP::Remote::Dr16::Switch::UP) && 
-                          (BSP::Remote::dr16.switchRight() == BSP::Remote::Dr16::Switch::UP);
     if (remote->isStopMode())
     {
         TASK::GIMBAL::gimbal.setNowStatus(TASK::GIMBAL::DISABLE);
@@ -191,12 +182,8 @@ void GimbalUpState()
     {
         TASK::GIMBAL::gimbal.setNowStatus(TASK::GIMBAL::KEYBOARD);
     }
-    else if(bothSwitchesUp)
-    {
-        TASK::GIMBAL::gimbal.setNowStatus(TASK::GIMBAL::VISION);
-    }
     else
     {
-        TASK::GIMBAL::gimbal.setNowStatus(TASK::GIMBAL::NORMAL);
+        TASK::GIMBAL::gimbal.setNowStatus(TASK::GIMBAL::NORMOL);
     }
 }

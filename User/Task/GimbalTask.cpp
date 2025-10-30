@@ -93,7 +93,7 @@ void Gimbal::UpState()
         TurnAround();
         break;
     }
-    case (GIMBAL::NORMAL): {
+    case (GIMBAL::NORMOL): {
         // 正常状态
         filter_tar_yaw_vel = remote_rx * 150;
         filter_tar_pitch += remote_ry * 0.5f;

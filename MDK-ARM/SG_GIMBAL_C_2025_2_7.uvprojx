@@ -856,11 +856,6 @@
               <FileType>8</FileType>
               <FilePath>..\User\APP\KeyBorad\KeyBroad.cpp</FilePath>
             </File>
-            <File>
-              <FileName>Heat_Control.cpp</FileName>
-              <FileType>8</FileType>
-              <FilePath>..\User\APP\Heat_Control.cpp</FilePath>
-            </File>
           </Files>
         </Group>
         <Group>

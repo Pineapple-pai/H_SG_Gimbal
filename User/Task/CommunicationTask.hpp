@@ -3,7 +3,6 @@
 #include "../APP/Tools.hpp"
 #include "../BSP/stdxxx.hpp"
 #include "../Task/EvenTask.hpp"
-#include "../APP/Heat_Control.hpp"
 namespace Communicat
 {
 // CAN通信相关定义
@@ -84,14 +83,13 @@ class Gimbal_to_Chassis
         uint16_t booster_heat_cd;
         uint16_t booster_heat_max;
         uint16_t booster_now_heat;
-        
     };
 		
-    struct __attribute__((packed)) IMU //IMU数据
-    {
-        float yaw;
-        float pitch;
-    };
+		struct __attribute__((packed)) IMU //IMU数据
+		{
+			float yaw;
+			float pitch;
+		};
     // CAN发送缓冲区
     uint8_t can_tx_buffer[3][8]; // 3帧，每帧8字节
     
