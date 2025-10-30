@@ -257,7 +257,7 @@ template <uint8_t N> class DMMotorBase : public MotorBase<N>
         DM_Vel vel;
         vel.vel_tmp = _vel;
 
-        CAN::BSP::Can_Send(hcan, init_address + send_idxs_[motor_index - 1], (uint8_t *)&vel, CAN_TX_MAILBOX2);
+        CAN::BSP::Can_Send(hcan, init_address + send_idxs_[motor_index - 1], (uint8_t *)&vel, CAN_TX_MAILBOX1);
     }
 
     /**

@@ -26,5 +26,5 @@ Ude yaw_ude(15, 0.12, 150, 100);
 Kpid_t Kpid_Friction_L_vel(0, 0, 0);
 Kpid_t Kpid_Friction_R_vel(0, 0, 0);
 
-Alg::LADRC::Adrc Adrc_Friction_L(Alg::LADRC::TDquadratic(150, 0.001), 5, 15, 1, 0.001, 1000);
-Alg::LADRC::Adrc Adrc_Friction_R(Alg::LADRC::TDquadratic(150, 0.001), 5, 15, 1, 0.001, 1000);
+Alg::LADRC::Adrc Adrc_Friction_L(Alg::LADRC::TDquadratic(150, 0.001), 4.0, 12, 1.2, 0.001, 1000);
+Alg::LADRC::Adrc Adrc_Friction_R(Alg::LADRC::TDquadratic(150, 0.001), 4.0, 12, 1.2, 0.001, 1000);

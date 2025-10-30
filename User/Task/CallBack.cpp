@@ -20,7 +20,6 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
             BSP::Motor::Dji::Motor3508.Parse(CAN1_RxHeader, CAN1_RxHeaderData);
             BSP::Motor::Dji::Motor2006.Parse(CAN1_RxHeader, CAN1_RxHeaderData);
             BSP::Motor::DM::Motor4310.Parse(CAN1_RxHeader, CAN1_RxHeaderData);
-            BSP::Motor::DM::Motor2325.Parse(CAN1_RxHeader, CAN1_RxHeaderData);
     }
 }
 
@@ -37,6 +36,10 @@ void HAL_CAN_RxFifo1MsgPendingCallback(CAN_HandleTypeDef *hcan)
         if (CAN2_RxHeader.StdId >= CAN_C2G_FRAME1_ID && 
             CAN2_RxHeader.StdId <= CAN_C2G_FRAME3_ID && CAN2_RxHeader.StdId <= CAN_C2G_FRAME3_ID) {
             Gimbal_to_Chassis_Data.HandleCANMessage(CAN2_RxHeader.StdId, CAN2_RxHeaderData);
+        }
+        else
+        {
+            BSP::Motor::DM::Motor2325.Parse(CAN2_RxHeader, CAN2_RxHeaderData);
         }
     }
 }

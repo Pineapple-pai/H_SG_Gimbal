@@ -35,7 +35,7 @@ void ShootTask(void *argument)
 
         TASK::Shoot::shoot_fsm.Control();
 
-        osDelay(1);
+        osDelay(2);
     }
 }
 
@@ -116,12 +116,7 @@ void Class_ShootFSM::UpState()
         // 如何失能状态，拨盘力矩为0，摩擦轮期望值为0
         Adrc_Friction_L.setTarget(0);
         Adrc_Friction_R.setTarget(0);
-
-        // pid_Motor_Friction_L_vel.setTarget(0);
-        // pid_Motor_Friction_L_vel.clearPID();
-        // pid_Motor_Friction_R_vel.setTarget(0);
-        // pid_Motor_Friction_R_vel.clearPID();
-        float current_angle = BSP::Motor::Dji::Motor2006.getAddAngleDeg(4);
+        float current_angle = BSP::Motor::Dji::Motor2006.getAddAngleDeg(1);
         adrc_Dail_vel.setTarget(current_angle);         
 
         break;
@@ -130,14 +125,14 @@ void Class_ShootFSM::UpState()
         // 单发模式
         // 设置摩擦轮速度，与连发模式相同
 
-        Adrc_Friction_L.setTarget(target_friction_omega);
-        Adrc_Friction_R.setTarget(-target_friction_omega);
+        Adrc_Friction_L.setTarget(-target_friction_omega);
+        Adrc_Friction_R.setTarget(target_friction_omega);
 
         // 热量限制（滑动窗口，需要持续计算）
         HeatLimit();
 
         // 获取当前角度
-        float current_angle = BSP::Motor::Dji::Motor2006.getAddAngleDeg(4);
+        float current_angle = BSP::Motor::Dji::Motor2006.getAddAngleDeg(1);
 
         static bool fired = false;
         static bool allow_fire = true; // 添加热量限制允许发射标志
@@ -170,8 +165,8 @@ void Class_ShootFSM::UpState()
     }
     case (Booster_Status::AUTO): {
         // 连发模式
-        Adrc_Friction_L.setTarget(target_friction_omega);
-        Adrc_Friction_R.setTarget(-target_friction_omega);
+        Adrc_Friction_L.setTarget(-target_friction_omega);
+        Adrc_Friction_R.setTarget(target_friction_omega);
         auto *remote = Mode::RemoteModeManager::Instance().getActiveController();
 
         // 获取目标发射频率（Hz）
@@ -189,7 +184,7 @@ void Class_ShootFSM::UpState()
         target_fire_hz = Tools.clamp(target_fire_hz, Heat_Limit.getNowFire(), 0.0f);
 
         // 获取当前角度
-        float current_angle = BSP::Motor::Dji::Motor2006.getAddAngleDeg(4);
+        float current_angle = BSP::Motor::Dji::Motor2006.getAddAngleDeg(1);
 
         // 计算角度变化
         float angle_per_frame = hz_to_angle(target_fire_hz);
@@ -204,17 +199,13 @@ void Class_ShootFSM::UpState()
 
 void Class_ShootFSM::Control(void)
 {
-    auto velL = BSP::Motor::DM::Motor2325.getDmRpm(1);
-    auto velR = BSP::Motor::DM::Motor2325.getDmRpm(2);
-    auto DailVel = BSP::Motor::Dji::Motor2006.getVelocityRpm(4);
-    auto Dail_pos = BSP::Motor::Dji::Motor2006.getAddAngleDeg(4);
-    
+    // 摩擦轮控制 - 保持1kHz
+    auto velL = BSP::Motor::DM::Motor2325.getVelocityRads(1);
+    auto velR = BSP::Motor::DM::Motor2325.getVelocityRads(2);
+    auto DailVel = BSP::Motor::Dji::Motor2006.getVelocityRpm(1);
+    auto Dail_pos = BSP::Motor::Dji::Motor2006.getAddAngleDeg(1);
     switch (Now_Status_Serial) {
         case Booster_Status::DISABLE:
-            // pid_Motor_Friction_L_vel.setTarget(0);
-            // pid_Motor_Friction_L_vel.clearPID();
-            // pid_Motor_Friction_R_vel.setTarget(0);
-            // pid_Motor_Friction_R_vel.clearPID();
             Adrc_Friction_L.setTarget(0);
             Adrc_Friction_R.setTarget(0);
             Motor_Friction_L_Out = Adrc_Friction_L.UpData(velL);
@@ -222,23 +213,16 @@ void Class_ShootFSM::Control(void)
             break;
         case Booster_Status::ONLY:
         case Booster_Status::AUTO:
-            // pid_Motor_Friction_L_vel.setTarget(target_friction_omega);
-            // pid_Motor_Friction_R_vel.setTarget(-target_friction_omega);
             Adrc_Friction_L.setTarget(target_friction_omega);
             Adrc_Friction_R.setTarget(-target_friction_omega);
             Motor_Friction_L_Out = Adrc_Friction_L.UpData(velL);
             Motor_Friction_R_Out = Adrc_Friction_R.UpData(velR);
-            // Motor_Friction_L_Out = pid_Motor_Friction_L_vel.GetPidPos(Kpid_Friction_L_vel, velL, 50.0f);
-            // Motor_Friction_R_Out = pid_Motor_Friction_R_vel.GetPidPos(Kpid_Friction_R_vel, velR, 50.0f);
             break;
     }
     
     UpState();
-    // 控制摩擦轮
-    // adrc_friction_L_vel.UpData(velL);
-    // adrc_friction_R_vel.UpData(velR);
-		
-    // 如果卡弹就让期望等于反馈
+       
+        // 如果卡弹就让期望等于反馈
     if (JammingFMS.Get_Now_Status_Serial() == Jamming_Status::PROCESSING)
         Dail_target_pos = Dail_pos;
 
@@ -254,19 +238,8 @@ void Class_ShootFSM::Control(void)
 
     // 卡弹检测
     Jamming(Dail_pos, pid_Dail_pos.GetErr());
-    // 拨盘发送
-//    Tools.vofaSend(Dail_target_pos, Dail_pos, fire_flag, Heat_Limit.getFireNum(), 0, 0);
-    // 摩擦轮发送
-    Tools.vofaSend(Adrc_Friction_L.getZ1(), Adrc_Friction_L.getTarget(),
-    Adrc_Friction_L.getFeedback(),
-                   Adrc_Friction_R.getZ1(), Adrc_Friction_R.getTarget(),
-                   Adrc_Friction_R.getFeedback());
-
-    // // 火控
-    // Tools.vofaSend(Heat_Limit.getFireNum(), Heat_Limit.getNowHeat(), Heat_Limit.getMaxHeat(),
-    // Heat_Limit.getCurSum(), 0,
-    //                0);
-
+    Tools.vofaSend(BSP::Motor::DM::Motor2325.getVelocityRpm(1), BSP::Motor::DM::Motor2325.getVelocityRpm(1),BSP::Motor::DM::Motor2325.getTorque(1),
+                    BSP::Motor::DM::Motor2325.getVelocityRpm(2), BSP::Motor::DM::Motor2325.getVelocityRpm(2),BSP::Motor::DM::Motor2325.getTorque(2));
     CAN_Send();
 }
 
@@ -294,23 +267,21 @@ void Class_ShootFSM::HeatLimit()
     Heat_Limit.setFrictionVel(velL, velR);
     // Heat_Limit.setTargetFire(target_fire_hz);
 
+
     Heat_Limit.UpData();
 }
 
 void Class_ShootFSM::CAN_Send(void)
 {
-    // if(BSP::Motor::DM::Motor2325.getTemperature(1) > 45.0f ){
-    //     BSP::Motor::DM::Motor2325.Off(&hcan1, 1);
-    // }
-    // if(BSP::Motor::DM::Motor2325.getTemperature(2) > 45.0f ){
-    //     BSP::Motor::DM::Motor2325.Off(&hcan1, 2);
-    // }
-    // else{
-    BSP::Motor::DM::Motor2325.ctrl_Motor(&hcan1, 1, Motor_Friction_L_Out);
-    BSP::Motor::DM::Motor2325.ctrl_Motor(&hcan1, 2, Motor_Friction_R_Out);
-    // }
-    BSP::Motor::Dji::Motor3508.setCAN(target_Dail_torque, 4);
 
+
+		BSP::Motor::DM::Motor2325.ctrl_Motor(&hcan2, 1, Motor_Friction_L_Out);
+		BSP::Motor::DM::Motor2325.ctrl_Motor(&hcan2, 2, Motor_Friction_R_Out);
+
+		BSP::Motor::Dji::Motor3508.setCAN(target_Dail_torque, 1);
+		BSP::Motor::Dji::Motor3508.sendCAN(&hcan1, 1);
+
+    
 }
 
 float Class_ShootFSM::rpm_to_hz(float tar_hz)
@@ -332,7 +303,7 @@ float Class_ShootFSM::hz_to_angle(float fire_hz)
 {
     const int slots_per_rotation = 9;                         // 拨盘每转一圈的槽位数
     const float angle_per_slot = 360.0f / slots_per_rotation; // 每个槽位对应的角度
-    const float control_period = 0.001f;                      // 控制周期1ms
+    const float control_period = 0.002f;                      // 控制周期1ms
 
     // 计算每帧需要转动的角度
     // (目标频率 * 每发角度) / 控制周期

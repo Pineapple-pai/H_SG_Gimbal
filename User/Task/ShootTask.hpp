@@ -117,7 +117,7 @@ class Class_ShootFSM : public Class_FSM
     float target_friction_L_torque = 0;
     float target_friction_R_torque = 0;
 
-    float target_friction_omega = 150;
+    float target_friction_omega = 40.0f;
     float target_fire_hz;
     float Max_dail_angle = 20.0f; // 拨盘最快频率
     float Motor_Friction_L_Out = 0.0f;
