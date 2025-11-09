@@ -3,7 +3,7 @@
 
 #include "../CAN/Bsp_Can.hpp"
 #include "../StaticTime.hpp"
-
+#include "../../HAL/CAN/can_hal.hpp"
 namespace BSP::Motor
 {
 template <uint8_t N> class MotorBase
@@ -35,8 +35,53 @@ template <uint8_t N> class MotorBase
     RunTime runTime_[N];
 
     virtual void Parse(const CAN_RxHeaderTypeDef RxHeader, const uint8_t *pData) = 0;
+      protected:
+    /**
+     * @brief 发送CAN帧的通用方法
+     * 
+     * @param can_id CAN ID
+     * @param data 要发送的数据
+     * @param dlc 数据长度
+     * @param mailbox 邮箱编号
+     */
+
 
   public:
+      void send_can_frame(uint32_t can_id, const uint8_t* data, uint8_t dlc, uint32_t mailbox = CAN_TX_MAILBOX1)
+    {
+        auto& can_bus = HAL::CAN::get_can_bus_instance();
+        HAL::CAN::Frame frame;
+        frame.id = can_id;
+        frame.dlc = dlc;
+        frame.is_extended_id = false;
+        frame.is_remote_frame = false;
+        frame.mailbox = mailbox;
+        
+        memcpy(frame.data, data, dlc);
+        can_bus.get_can1().send(frame);
+    }
+    
+    /**
+     * @brief 注册CAN接收回调到指定CAN设备
+     * 
+     * @param can_device HAL CAN设备实例
+     */
+    void registerCallback(HAL::CAN::ICanDevice* can_device)
+    {
+        if (can_device) {
+            can_device->register_rx_callback([this](const HAL::CAN::Frame& frame) {
+                // 创建临时CAN_RxHeaderTypeDef结构体以兼容现有Parse函数
+                CAN_RxHeaderTypeDef rx_header;
+                rx_header.StdId = frame.id;
+                rx_header.IDE = frame.is_extended_id ? CAN_ID_EXT : CAN_ID_STD;
+                rx_header.RTR = frame.is_remote_frame ? CAN_RTR_REMOTE : CAN_RTR_DATA;
+                rx_header.DLC = frame.dlc;
+                
+                // 调用现有的Parse函数处理数据
+                this->Parse(rx_header, frame.data);
+            });
+        }
+    }
     /**
      * @brief 获取角度
      *

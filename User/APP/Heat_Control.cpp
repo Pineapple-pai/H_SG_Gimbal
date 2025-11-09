@@ -1,14 +1,13 @@
 #include "../APP/Heat_Control.hpp"
 #include "../../User/BSP/DWT/DWT.hpp" // 用于时间计算
-
+#include "math.h"
 namespace HeatControl {
-
 void HeatController::UpDate() {
     // 更新当前状态计时（FSM内置计时）
     Status[Get_Now_Status_Serial()].Count_Time++;
     
     // 计算摩擦轮速度差
-    float velDiff = frictionLeftVel - frictionRightVel;
+    float velDiff = frictionRightVel - frictionLeftVel;
     
     // 状态机处理逻辑
     switch (Get_Now_Status_Serial()) {
@@ -24,7 +23,7 @@ void HeatController::UpDate() {
         
         case ENABLE: {
             // 计算电流差并加入滑动窗口检测
-            float currentDiff = frictionLeftCurrent - frictionRightCurrent;
+            float currentDiff = frictionRightCurrent - frictionLeftCurrent;
             bool isBeyond = currentDetector.addValue(currentDiff);
             
             // 检测到击发，累加热量和计数

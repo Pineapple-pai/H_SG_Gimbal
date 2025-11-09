@@ -2,15 +2,23 @@
 #include "../BSP/Remote/Dbus/Dbus.hpp"
 #include "../BSP/IMU/HI12H3_IMU.hpp"
 #include "../BSP/CAN/Bsp_Can.hpp"
+#include "../HAL/CAN/can_hal.hpp"
 #include "tim.h"
-
+#include "../BSP/Motor/Dji/DjiMotor.hpp"
+#include "../BSP/Motor/DM/DmMotor.hpp"
 bool InitFlag = false;
 void Init()
 {
     // 初始化
     BSP::Remote::dr16.Init();
 
-    CAN::BSP::Can_Init();
+    //CAN::BSP::Can_Init();
+    auto& can1 = HAL::CAN::get_can_bus_instance().get_can1();
+    //BSP::Motor::Dji::Motor6020.registerCallback(&can1);
+    BSP::Motor::DM::Motor4310.registerCallback(&can1);
+    can1.start();
+
+    
     BSP::IMU::imu.Init();
 
     HAL_TIM_Base_Start_IT(&htim7);

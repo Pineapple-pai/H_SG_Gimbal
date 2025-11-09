@@ -8,6 +8,7 @@
 #include "../User/Algorithm/LADRC/Adrc.hpp"
 #include "../User/BSP/DWT/DWT.hpp"
 #include "../APP/Variable.hpp"
+#include "../APP/Heat_Control.hpp"
 namespace TASK::Shoot
 {
 using namespace Alg::LADRC;
@@ -118,6 +119,7 @@ class Class_ShootFSM : public Class_FSM
     float target_friction_R_torque = 0;
 
     float target_friction_omega = 40.0f;
+    float target_torque = 1.5f;
     float target_fire_hz;
     float Max_dail_angle = 20.0f; // 拨盘最快频率
     float Motor_Friction_L_Out = 0.0f;
@@ -127,7 +129,8 @@ class Class_ShootFSM : public Class_FSM
     // 开火标志位
     uint8_t fire_flag = 0;
 
-    APP::Heat_Detector::Class_FSM_Heat_Limit Heat_Limit;
+    // APP::Heat_Detector::Class_FSM_Heat_Limit Heat_Limit;
+    HeatControl::HeatController Heat_Limit;
     // 发射机构控制模式
     // Adrc Adrc_Friction_L;
     // Adrc Adrc_Friction_R;

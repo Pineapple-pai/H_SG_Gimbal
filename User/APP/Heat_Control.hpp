@@ -97,7 +97,7 @@ private:
     // 热量阈值
     float heatLimitSnubber = 80.0f;
     float heatLimitStop = 20.0f;
-    static constexpr float CUR_VEL_THRESHOLD = 2900.0f;
+    static constexpr float CUR_VEL_THRESHOLD = 15.0f;
     
     // 时间相关
     uint32_t boosterTime = 0;

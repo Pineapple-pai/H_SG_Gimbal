@@ -781,6 +781,31 @@
               <FileType>8</FileType>
               <FilePath>..\User\HAL\My_HAL.cpp</FilePath>
             </File>
+            <File>
+              <FileName>can_hal.hpp</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\User\HAL\CAN\can_hal.hpp</FilePath>
+            </File>
+            <File>
+              <FileName>can_bus_impl.cpp</FileName>
+              <FileType>8</FileType>
+              <FilePath>..\User\HAL\CAN\impl\can_bus_impl.cpp</FilePath>
+            </File>
+            <File>
+              <FileName>can_device_impl.cpp</FileName>
+              <FileType>8</FileType>
+              <FilePath>..\User\HAL\CAN\impl\can_device_impl.cpp</FilePath>
+            </File>
+            <File>
+              <FileName>can_bus.cpp</FileName>
+              <FileType>8</FileType>
+              <FilePath>..\User\HAL\CAN\interface\can_bus.cpp</FilePath>
+            </File>
+            <File>
+              <FileName>can_device.cpp</FileName>
+              <FileType>8</FileType>
+              <FilePath>..\User\HAL\CAN\interface\can_device.cpp</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
@@ -790,11 +815,6 @@
               <FileName>HI12H3_IMU.cpp</FileName>
               <FileType>8</FileType>
               <FilePath>..\User\BSP\IMU\HI12H3_IMU.cpp</FilePath>
-            </File>
-            <File>
-              <FileName>Bsp_Can.hpp</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\User\BSP\CAN\Bsp_Can.hpp</FilePath>
             </File>
             <File>
               <FileName>Init.cpp</FileName>
@@ -855,6 +875,11 @@
               <FileName>KeyBroad.cpp</FileName>
               <FileType>8</FileType>
               <FilePath>..\User\APP\KeyBorad\KeyBroad.cpp</FilePath>
+            </File>
+            <File>
+              <FileName>Heat_Control.cpp</FileName>
+              <FileType>8</FileType>
+              <FilePath>..\User\APP\Heat_Control.cpp</FilePath>
             </File>
           </Files>
         </Group>

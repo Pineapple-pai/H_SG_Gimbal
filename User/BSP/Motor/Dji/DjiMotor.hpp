@@ -2,7 +2,7 @@
 #pragma once
 // 基础DJI电机实现
 #include "../MotorBase.hpp"
-
+#include "../../../HAL/CAN/can_hal.hpp"
 #include "can.h"
 #include <cstdint>
 #include <cstring> // 添加头文件
@@ -71,7 +71,6 @@ template <uint8_t N> class DjiMotorBase : public MotorBase<N>
     }
 
   public:
-    // 解析函数
     /**
      * @brief 解析CAN数据
      *
@@ -80,7 +79,7 @@ template <uint8_t N> class DjiMotorBase : public MotorBase<N>
      */
     void Parse(const CAN_RxHeaderTypeDef RxHeader, const uint8_t *pData)
     {
-        const uint16_t received_id = CAN::BSP::CAN_ID(RxHeader);
+        const uint16_t received_id = HAL::CAN::ICanDevice::extract_id(RxHeader);
 
         for (uint8_t i = 0; i < N; ++i)
         {
@@ -99,6 +98,7 @@ template <uint8_t N> class DjiMotorBase : public MotorBase<N>
         }
     }
 
+
     /**
      * @brief 设置发送数据
      *
@@ -107,8 +107,8 @@ template <uint8_t N> class DjiMotorBase : public MotorBase<N>
      */
     void setCAN(int16_t data, int id)
     {
-        msd.Data[(id - 1) * 2] = data >> 8;
-        msd.Data[(id - 1) * 2 + 1] = data << 8 >> 8;
+        msd[(id - 1) * 2] = data >> 8;
+        msd[(id - 1) * 2 + 1] = data << 8 >> 8;
     }
 
     /**
@@ -119,7 +119,7 @@ template <uint8_t N> class DjiMotorBase : public MotorBase<N>
      */
     void sendCAN(CAN_HandleTypeDef *han, uint32_t pTxMailbox)
     {
-        CAN::BSP::Can_Send(han, send_idxs_, msd.Data, CAN_TX_MAILBOX2);
+        MotorBase<N>::send_can_frame(send_idxs_, msd, 8, pTxMailbox);
     }
 
   protected:
@@ -192,7 +192,8 @@ template <uint8_t N> class DjiMotorBase : public MotorBase<N>
     DjiMotorfeedback feedback_[N]; // 反馈数据
     uint8_t recv_idxs_[N];         // ID索引
     uint32_t send_idxs_;
-    CAN::BSP::send_data msd;
+    // CAN::BSP::send_data msd;
+    uint8_t msd[8];
 
   public:
     Parameters params_; // 转国际单位参数列表
