@@ -1,6 +1,5 @@
 #pragma once
 
-#include "../APP/Heat_Detector/Heat_Detector.hpp"
 #include "../Algorithm/FSM/alg_fsm.hpp"
 #include "../Algorithm/LADRC/Adrc.hpp"
 #include "../BSP/SimpleKey/SimpleKey.hpp"
@@ -8,7 +7,7 @@
 #include "../User/Algorithm/LADRC/Adrc.hpp"
 #include "../User/BSP/DWT/DWT.hpp"
 #include "../APP/Variable.hpp"
-#include "../APP/Heat_Control.hpp"
+#include "../APP/Heat_Detector/Heat_Control.hpp"
 namespace TASK::Shoot
 {
 using namespace Alg::LADRC;
@@ -118,10 +117,10 @@ class Class_ShootFSM : public Class_FSM
     float target_friction_L_torque = 0;
     float target_friction_R_torque = 0;
 
-    float target_friction_omega = 40.0f;
+    float target_friction_omega = 3900.0f;
     float target_torque = 1.5f;
     float target_fire_hz;
-    float Max_dail_angle = 20.0f; // 拨盘最快频率
+    float Max_dail_angle = 28.0f; // 拨盘最快频率
     float Motor_Friction_L_Out = 0.0f;
     float Motor_Friction_R_Out = 0.0f;
     Class_JammingFSM JammingFMS;  
@@ -136,11 +135,11 @@ class Class_ShootFSM : public Class_FSM
     // Adrc Adrc_Friction_R;
     Adrc adrc_Dail_vel;
 
-    Kpid_t Kpid_Dail_pos;
-    Kpid_t Kpid_Dail_vel;
+    // Kpid_t Kpid_Dail_pos;
+    // Kpid_t Kpid_Dail_vel;
 
-    PID pid_Dail_pos;
-    PID pid_Dail_vel;
+    // PID pid_Dail_pos;
+    // PID pid_Dail_vel;
 
     // Kpid_t Kpid_Friction_L_vel;
     PID pid_Motor_Friction_L_vel;

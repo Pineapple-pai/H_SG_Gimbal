@@ -29,16 +29,21 @@ void Adrc::ESOCalc(float target, float feedback)
     e = feedback_ - this->z1;
     z1 += (z2 + beta1 * e + b0_ * this->u) * this->h_;
     z2 += beta2 * e * h_;
+
+    z2 *= 0.99f;
 }
 
 void Adrc::SefCalc()
 {
     // 计算跟踪误差
-		float u0 = 0;
+    float u0 = 0;
     float e1 = td_.getX1() - z1;
+    
+    // 误差变化率：直接用TD的微分输出
+    float de1 = td_.getX2();
 
-    // 计算控制律
-    u0 = Kp_ * e1;
+    // 控制律（PD形式）
+    u0 = Kp_ * e1 + Kd_ * de1;
 
     // 计算最终控制量（补偿扰动）
     u = (u0 - z2) / b0_;

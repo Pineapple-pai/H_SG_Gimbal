@@ -1,13 +1,7 @@
 #pragma once
 
-#include <memory>
-#include <string>
-
 #include "../Algorithm/FSM/alg_fsm.hpp"
-#include "../Algorithm/LADRC/Adrc.hpp"
 #include "../User/BSP/SimpleKey/SimpleKey.hpp"
-
-#include "../Algorithm/PID.hpp"
 
 namespace TASK::GIMBAL
 {
@@ -15,7 +9,7 @@ namespace TASK::GIMBAL
 enum Gimbal_Status
 {
     DISABLE,
-    NORMOL,
+    NORMAL,
     VISION,
     KEYBOARD
 };
@@ -41,25 +35,11 @@ class Gimbal : public Class_FSM
     float filter_tar_yaw_vel;
     float filter_tar_yaw_pos;
 
-    float filter_tar_pitch;
+    // Yaw轴MIT控制参数
+    float yaw_kp = 30.0f;
+    float yaw_kd = 1.2f;
 
-    uint8_t is_sin;
-    float sin_val;
-    float sin_hz;
-    float b;
-    float yaw_feedford = 0.1;
-
-    float DM_Kp = 120;
-    float DM_Kd = 2.8;
-
-    uint32_t task_tick;
-
-    Kpid_t kpid_yaw_angle; // yaw轴pid增益
-
-    PID pid_yaw_angle; // yaw轴pid计算
-
-    Alg::LADRC::Adrc adrc_yaw_vel; // adrc的速度环
-
+    // 按键状态
     BSP::Key::SimpleKey DM_state;
     BSP::Key::SimpleKey vision_state;
 

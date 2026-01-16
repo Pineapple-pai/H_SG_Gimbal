@@ -9,7 +9,7 @@
 
 #include "../APP/KeyBorad/KeyBroad.hpp"
 #include "../APP/Mod/RemoteModeManager.hpp"
-#include "../BSP/CAN/Bsp_Can.hpp"
+
 #include "../BSP/Init.hpp"
 #include "../BSP/Motor/DM/DmMotor.hpp"
 #include "../BSP/Motor/Dji/DjiMotor.hpp"
@@ -44,27 +44,27 @@ bool Dir::Dir_Remote()
     return Dir;
 }
 
-bool Dir::Dir_Yaw()
-{
-    bool Dir = BSP::Motor::Dji::Motor6020.ISDir();
-    DirData.Yaw = BSP::Motor::Dji::Motor6020.GetDir(1);
+// bool Dir::Dir_Yaw()
+// {
+//     bool Dir = BSP::Motor::Dji::Motor6020.ISDir();
+//     DirData.Yaw = BSP::Motor::Dji::Motor6020.GetDir(1);
 
-    return DirData.Yaw;
-}
+//     return DirData.Yaw;
+// }
 
-bool Dir::Dir_Pitch()
-{
-    bool Dir = BSP::Motor::DM::Motor4310.ISDir();
+// bool Dir::Dir_Pitch()
+// {
+//     bool Dir = BSP::Motor::DM::Motor4310.ISDir();
 
-    DirData.Pitch = BSP::Motor::DM::Motor4310.GetDir(1);
+//     DirData.Pitch = BSP::Motor::DM::Motor4310.GetDir(1);
 
-    if (Dir == true)
-    {
-        BSP::Motor::DM::Motor4310.On(&hcan1, 1);
-        osDelay(1);
-    }
-    return Dir;
-}
+//     if (Dir == true)
+//     {
+//         BSP::Motor::DM::Motor4310.On(&hcan1, 1);
+//         osDelay(1);
+//     }
+//     return Dir;
+// }
 
 bool Dir::Init_Flag()
 {
@@ -92,8 +92,8 @@ void Dir::UpEvent()
     Init_Flag();
 
     Dir_Remote();
-    Dir_Pitch();
-    Dir_Yaw();
+    // Dir_Pitch();
+    // Dir_Yaw();
     Dir_IMU();
 
     Notify();

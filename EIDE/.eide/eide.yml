@@ -184,7 +184,11 @@ targets:
         - .cmsis/include
         - ../MDK-ARM/RTE/_SG_GIMBAL_C_2025_2_7
       libList: []
-    excludeList: []
+    excludeList:
+      - ../User/BSP/CAN
+      - ../User/HAL/HAL.cpp
+      - ../User/HAL/My_HAL.cpp
+      - ../User/BSP/SimpleKey/SimpleKey.cpp
     toolchain: AC6
     toolchainConfigMap:
       AC6:
@@ -201,7 +205,7 @@ targets:
             language-c: c99
             language-cpp: c++17
             one-elf-section-per-function: true
-            optimization: level-1
+            optimization: level-0
             warnings: ac5-like-warnings
           global:
             output-debug-info: enable

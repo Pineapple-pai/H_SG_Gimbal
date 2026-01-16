@@ -50,8 +50,8 @@ class TDquadratic
 class Adrc
 {
   public:
-    Adrc(TDquadratic td = TDquadratic(1, 0), float Kp = 0, float wc = 0, float b0 = 1, float h = 0.001f, float max = 0)
-        : td_(td), Kp_(Kp), wc_(wc), b0_(b0), h_(h), max_(max)
+    Adrc(TDquadratic td = TDquadratic(1, 0), float Kp = 0, float Kd = 0, float wc = 0, float b0 = 1, float h = 0.001f, float max = 0)
+        : td_(td), Kp_(Kp), Kd_(Kd), wc_(wc), b0_(b0), h_(h), max_(max)
     {
     }
 
@@ -102,6 +102,7 @@ class Adrc
 
   private:
     float Kp_;
+    float Kd_ = 0;               // 微分增益
     float z1, z2;
     float wc_;                   // 观测器带宽
     float target_, feedback_, e; // 反馈值和误差

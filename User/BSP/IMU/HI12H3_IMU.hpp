@@ -76,55 +76,55 @@ class HI12
         uint16_t crc;      // CRC校验
     };
 
-    // 数据域
+    // 数据域 - 根据0x91数据包格式，所有数据连续存放
     struct __attribute__((packed)) System_telemetry // 系统遥测
     {
-        uint8_t tag;
-        uint16_t pps_sync_stamp;
-        int8_t temperature;
-        float air_pressure;
-        uint32_t system_time;
+        uint8_t tag;            // 0x91
+        uint16_t main_status;   // 状态字
+        int8_t temperature;     // 温度 °C
+        float air_pressure;     // 气压 Pa
+        uint32_t system_time;   // 时间戳 ms
     };
 
-    // 加速度数据
-    struct __attribute__((packed)) Acc // 加速度
+    // 加速度数据 (连续存放，无tag)
+    struct __attribute__((packed)) Acc // 加速度 单位:G
     {
         float Acc_x;
         float Acc_y;
         float Acc_z;
     };
 
-    // 角速度数据
-    struct __attribute__((packed)) Gyr // 角速度
+    // 角速度数据 (连续存放，无tag)
+    struct __attribute__((packed)) Gyr // 角速度 单位:deg/s
     {
         float Gyr_x;
         float Gyr_y;
         float Gyr_z;
     };
 
-    // 磁强度数据
-    struct __attribute__((packed)) Mag // 磁强度
+    // 磁强度数据 (连续存放，无tag)
+    struct __attribute__((packed)) Mag // 磁强度 单位:μT
     {
         float Mag_x;
         float Mag_y;
         float Mag_z;
     };
 
-    // 欧拉角数据
-    struct __attribute__((packed)) Euler
+    // 欧拉角数据 (连续存放，无tag)
+    struct __attribute__((packed)) Euler // 单位:deg
     {
-        float Euler_roll;
-        float Euler_pitch;
-        float Euler_yaw;
+        float Euler_roll;   // 横滚角
+        float Euler_pitch;  // 俯仰角
+        float Euler_yaw;    // 航向角
     };
 
-    // 四元数数据
+    // 四元数数据 (连续存放，无tag) - 注意顺序是 w,x,y,z
     struct __attribute__((packed)) Quat
     {
-        float Quat_x;
-        float Quat_y;
-        float Quat_z;
-        float Quat_w;
+        float Quat_w;  // 四元数W
+        float Quat_x;  // 四元数X
+        float Quat_y;  // 四元数Y
+        float Quat_z;  // 四元数Z
     };
 
     struct AddData

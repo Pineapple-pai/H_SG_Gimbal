@@ -6,15 +6,16 @@
 #include "../BSP/Motor/DM/DmMotor.hpp"
 #include "../BSP/Motor/Dji/DjiMotor.hpp"
 #include "../BSP/Remote/Dbus/Dbus.hpp"
+#include "../HAL/CAN/can_hal.hpp"
 
 #include "../APP/Mod/RemoteModeManager.hpp"
 
 #include "usbd_cdc_if.h"
 // #include "usb_device.h"
-
 #include "cmsis_os2.h"
 #include "tim.h"
 #include "usart.h"
+#include <cstring>
 
 #define SIZE 8
 uint8_t format[15];
@@ -35,7 +36,7 @@ void CommunicationTask(void *argument)
         Gimbal_to_Chassis_Data.Data_send();
         // Gimbal_to_Chassis_Data.Receive();
 
-        osDelay(int_time);
+        osDelay(20);
     }
 }
 
@@ -99,11 +100,12 @@ void Gimbal_to_Chassis::Data_send()
 
     ui_list.aim_x = vision.getAimX();
     ui_list.aim_y = vision.getAimY();
-    i_mu.yaw = BSP::IMU::imu.getAddYaw();
-    i_mu.pitch = BSP::IMU::imu.getPitch();
-    // 计算总数据长度
-    len = sizeof(direction) + sizeof(chassis_mode) + sizeof(ui_list) + sizeof(i_mu) + 1; //+1帧头
-    uint8_t tx_data[23];
+
+    // 计算总数据长度 - 两帧发送 (移除i_mu)
+    // Frame1: Head(1) + Direction前7字节 = 8字节
+    // Frame2: Direction后2字节 + ChassisMode(1) + UiList(3) + 填充(2) = 8字节
+    len = sizeof(direction) + sizeof(chassis_mode) + sizeof(ui_list) + 1; //+1帧头
+    uint8_t tx_data[14];
     // 使用临时指针将数据拷贝到缓冲区
     auto temp_ptr = tx_data;
 
@@ -111,108 +113,69 @@ void Gimbal_to_Chassis::Data_send()
     temp_ptr++;
 
     const auto memcpy_safe = [&](const auto &data) {
-        memcpy(temp_ptr, &data, sizeof(data));
+        std::memcpy(temp_ptr, &data, sizeof(data));
         temp_ptr += sizeof(data);
     };
 
     memcpy_safe(direction);    // 序列化方向数据
     memcpy_safe(chassis_mode); // 序列化模式数据
     memcpy_safe(ui_list);      // 序列化UI状态
-    memcpy_safe(i_mu);
-    // 发送数据
-    // HAL_UART_Transmit_DMA(&huart6, buffer, len);
-    // 分三帧通过CAN发送
-    // 第一帧: 8字节 (0-7)
-    memcpy(can_tx_buffer[0], tx_data, 8);
-    CAN::BSP::Can_Send(&hcan2, CAN_G2C_FRAME1_ID, can_tx_buffer[0], 0);
+
+    // 获取CAN1设备实例 
+    auto& can2 = HAL::CAN::get_can_bus_instance().get_device(HAL::CAN::CanDeviceId::HAL_Can2);
+    if (HAL_CAN_GetTxMailboxesFreeLevel(can2.get_handle()) == 0)
+    {
+        return;  // 邮箱满，跳过本次发送
+    }
+
+    // 分两帧通过CAN发送
+    HAL::CAN::Frame frame1;
+    frame1.id = CAN_G2C_FRAME1_ID;
+    frame1.dlc = 8;
+    frame1.is_extended_id = false;
+    frame1.is_remote_frame = false;
     
-    // 第二帧: 8字节 (8-15)
-    memcpy(can_tx_buffer[1], tx_data + 8, 8);
-    CAN::BSP::Can_Send(&hcan2, CAN_G2C_FRAME2_ID, can_tx_buffer[1], 0);
-
-    // 第三帧: 7字节 (16-22)，最后一字节补0
-    memcpy(can_tx_buffer[2], tx_data + 16, 7);
-    can_tx_buffer[2][7] = 0; // 补0
-    CAN::BSP::Can_Send(&hcan2, CAN_G2C_FRAME3_ID, can_tx_buffer[2], 0);
+    // 第一帧: Head + Direction前7字节 (0-7)
+    std::memcpy(can_tx_buffer[0], tx_data, 8);
+    std::memcpy(frame1.data, can_tx_buffer[0], 8);
+    can2.send(frame1);
+    
+    // 第二帧: Direction后2字节 + ChassisMode + UiList + 填充
+    HAL::CAN::Frame frame2;
+    frame2.id = CAN_G2C_FRAME2_ID;
+    frame2.dlc = 8;
+    frame2.is_extended_id = false;
+    frame2.is_remote_frame = false;
+    
+    std::memcpy(can_tx_buffer[1], tx_data + 8, 6);  // 剩余6字节数据
+    can_tx_buffer[1][6] = 0;  // 填充
+    can_tx_buffer[1][7] = 0;  // 填充
+    std::memcpy(frame2.data, can_tx_buffer[1], 8);
+    can2.send(frame2);
 }
 
-void Gimbal_to_Chassis::Receive()
-{
-    len = sizeof(rx_refree);
-    HAL_UART_Receive_DMA(&huart6, rx_buffer, len); // +2 for frame header
-
-    if (rx_buffer[0] != 0x21 || rx_buffer[1] != 0x12)
-        return;
-
-    // 跳过帧头(2字节)，直接复制数据部分
-    memcpy(&rx_refree, rx_buffer, sizeof(rx_refree));
-}
 void Gimbal_to_Chassis::HandleCANMessage(uint32_t std_id, uint8_t* data)
 {
-    ParseCANFrame(std_id, data);
-}
-void Gimbal_to_Chassis::ParseCANFrame(uint32_t std_id, uint8_t* data)
-{
-    uint32_t current_time = HAL_GetTick();
+    // 单帧接收 - 双字节帧头校验 (0x21, 0x12)
     
-    // 检查超时，如果超时则重置接收状态
-    if (current_time - last_frame_time > FRAME_TIMEOUT) {
-        frame1_received = false;
-        frame2_received = false;
-				frame3_received = false;
-    }
-    last_frame_time = current_time;
-		
-    int idx = std_id - CAN_C2G_FRAME1_ID;
-    
-    if (idx >= 0 && idx < 3) {
-        uint16_t offsets[3] = {0, 8, 16};
-        uint8_t sizes[3] = {8, 8, 7};
-        bool* flags[3] = {&frame1_received, &frame2_received, &frame3_received};
-        
-        std::memcpy(can_rx_buffer + offsets[idx], data, sizes[idx]);
-        *(flags[idx]) = true;
-    }
-//    switch(std_id) {
-//        case CAN_C2G_FRAME1_ID:
-//            memcpy(can_rx_buffer, data, 8);
-//            frame1_received = true;
-//            break;
-//        case CAN_C2G_FRAME2_ID:
-//            memcpy(can_rx_buffer + 8, data, 8);
-//            frame2_received = true;
-//            break;
-//        case CAN_C2G_FRAME3_ID:
-//            memcpy(can_rx_buffer + 16, data, 7);
-//            frame3_received = true;
-//            break;
-//        default:
-//            return;
-//    }
-
-    // 如果两帧都接收完成，处理数据
-    if (frame1_received && frame2_received && frame3_received) {
-        ProcessReceivedData();
-        // 重置接收状态
-				frame1_received = frame2_received = frame3_received = false;
-    }
-}
-void Gimbal_to_Chassis::ProcessReceivedData()
-{
-    // 裁判系统数据帧头检查
-    if (can_rx_buffer[0] != 0x21 || can_rx_buffer[1] != 0x12)
+    // 验证帧头
+    if (data[0] != 0x21 || data[1] != 0x12) {
         return;
+    }
 
-    // 直接复制数据部分
-    memcpy(&rx_refree, can_rx_buffer, sizeof(rx_refree));
+    // 更新接收时间戳
+    last_frame_time = HAL_GetTick();
+    
+    // 帧头校验成功，直接解析RxRefree结构体数据
+    std::memcpy(&rx_refree, data, sizeof(rx_refree));
 }
 float Gimbal_to_Chassis::CalcuGimbalToChassisAngle()
 {
 
-    float encoder_angle = BSP::Motor::Dji::Motor6020.getAngleDeg(1);
+    float encoder_angle = BSP::Motor::DM::Motor4310.getAngleDeg(2);
 
     // 计算最终角度误差 --------------------------------------------------
-    return Tools.Zero_crossing_processing(Init_Angle, encoder_angle, 360.0f) - encoder_angle;
+    return Tools.Zero_crossing_processing(Init_Angle, encoder_angle, 180.0f) - encoder_angle;
 }
 
 float rx_angle;

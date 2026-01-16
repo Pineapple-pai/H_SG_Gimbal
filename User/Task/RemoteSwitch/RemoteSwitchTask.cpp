@@ -184,6 +184,6 @@ void GimbalUpState()
     }
     else
     {
-        TASK::GIMBAL::gimbal.setNowStatus(TASK::GIMBAL::NORMOL);
+        TASK::GIMBAL::gimbal.setNowStatus(TASK::GIMBAL::NORMAL);
     }
 }

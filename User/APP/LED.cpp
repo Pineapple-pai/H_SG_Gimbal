@@ -6,26 +6,41 @@ bool LED::Update(void)
 {
     Dir *dir = static_cast<Dir *>(sub);
 
-	
-    if(dir->getDir_Yaw())
+    // 优先级: 遥控器 > IMU > Yaw > Pitch
+    
+    // 1. 遥控器断联 - 白色 (最高优先级)
+    if(dir->getDir_Remote())
     {
-        uint32_t aRGB = RED;
-        aRGB_led_show(aRGB);
+        aRGB_led_show(WHITE);
         return false;
     }
     
-    if(dir->getDir_IMU() == true)
+    // 2. IMU断联 - 粉色
+    if(dir->getDir_IMU())
     {
-        uint32_t aRGB = PINK;
-        aRGB_led_show(aRGB);
+        aRGB_led_show(PINK);
+        return false;
+    }
+    
+    // 3. Yaw电机断联 - 红色
+    if(dir->getDir_Yaw())
+    {
+        aRGB_led_show(RED);
+        return false;
+    }
+    
+    // 4. Pitch电机断联 - 蓝色 (最低优先级)
+    if(dir->getDir_Pitch())
+    {
+        aRGB_led_show(BULE);
         return false;
     }
 
-		Normal_State();
-
-		
-	return 0;
+    // 所有设备在线 - 正常流水灯
+    Normal_State();
+    return true;
 }
+
 
 void LED::ColorChange(uint16_t index)
 {

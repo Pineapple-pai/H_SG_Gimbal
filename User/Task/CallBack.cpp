@@ -5,61 +5,56 @@
 #include "../BSP/Motor/Dji/DjiMotor.hpp"
 #include "../BSP/Remote/Dbus/Dbus.hpp"
 #include "../BSP/Remote/Mini/Mini.hpp"
-#include "../HAL/My_HAL.hpp"
+
 #include "../Task/CommunicationTask.hpp"
 #include "../HAL/CAN/can_hal.hpp"   
-// can_filo0中断接收
-CAN_RxHeaderTypeDef CAN1_RxHeader; // can接收数据
-uint8_t CAN1_RxHeaderData[8] = {0};
-// void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
-// {
-//     // 接受信息
-//     HAL_CAN_GetRxMessage(hcan, CAN_RX_FIFO0, &CAN1_RxHeader, CAN1_RxHeaderData);
-//     if (hcan == &hcan1)
-//     {
-//             BSP::Motor::Dji::Motor6020.Parse(CAN1_RxHeader, CAN1_RxHeaderData);
-//             BSP::Motor::Dji::Motor3508.Parse(CAN1_RxHeader, CAN1_RxHeaderData);
-//             BSP::Motor::Dji::Motor2006.Parse(CAN1_RxHeader, CAN1_RxHeaderData);
-//             BSP::Motor::DM::Motor4310.Parse(CAN1_RxHeader, CAN1_RxHeaderData);
-//     }
-// }
+#include "../HAL/UART/uart_hal.hpp"
+
 extern "C" void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
 {
-    HAL::CAN::Frame rx_frame;
-    auto &can1 = HAL::CAN::get_can_bus_instance().get_device(HAL::CAN::CanDeviceId::HAL_Can1);
+    HAL::CAN::Frame rx_frame1;
+    static auto &can1 = HAL::CAN::get_can_bus_instance().get_device(HAL::CAN::CanDeviceId::HAL_Can1);
 
     if (hcan == can1.get_handle())
     {
-        can1.receive(rx_frame);  // receive()内部会自动触发所有注册的回调
+        can1.receive(rx_frame1);  // receive()内部会自动触发所有注册的回调
+        
+        BSP::Motor::Dji::Motor2006.Parse(rx_frame1);
+        BSP::Motor::Dji::Motor3508.Parse(rx_frame1);
+				BSP::Motor::DM::Motor4310.Parse(rx_frame1);
+        
     }
 }
-// can_filo0中断接收
-CAN_RxHeaderTypeDef CAN2_RxHeader; // can接收数据
-uint8_t CAN2_RxHeaderData[8] = {0};
-void HAL_CAN_RxFifo1MsgPendingCallback(CAN_HandleTypeDef *hcan)
+
+extern "C" void HAL_CAN_RxFifo1MsgPendingCallback(CAN_HandleTypeDef *hcan)
 {
-    // 接受信息
-    HAL_CAN_GetRxMessage(hcan, CAN_RX_FIFO1, &CAN2_RxHeader, CAN2_RxHeaderData);
-    if (hcan == &hcan2)
+    HAL::CAN::Frame rx_frame2;
+    static auto &can2 = HAL::CAN::get_can_bus_instance().get_device(HAL::CAN::CanDeviceId::HAL_Can2);
+
+    if (hcan == can2.get_handle())
     {
-        // 检查是否为底盘到云台的通信消息
-        if (CAN2_RxHeader.StdId >= CAN_C2G_FRAME1_ID && 
-            CAN2_RxHeader.StdId <= CAN_C2G_FRAME3_ID && CAN2_RxHeader.StdId <= CAN_C2G_FRAME3_ID) {
-            Gimbal_to_Chassis_Data.HandleCANMessage(CAN2_RxHeader.StdId, CAN2_RxHeaderData);
-        }
-        else
-        {
-            //BSP::Motor::DM::Motor2325.Parse(CAN2_RxHeader, CAN2_RxHeaderData);
-        }
+        can2.receive(rx_frame2);  // receive()内部会自动触发所有注册的回调
+        Gimbal_to_Chassis_Data.HandleCANMessage(rx_frame2.id, rx_frame2.data);    
+      
     }
 }
 
-void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
+uint8_t dbus_rx_buffer[18];
+uint8_t imu_rx_buffer[82];
+extern "C" void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
 {
-    auto &mini = BSP::Remote::Mini::Instance();
+    // 获取UART实例
+    auto& uart3 = HAL::UART::get_uart_bus_instance().get_device(HAL::UART::UartDeviceId::HAL_Uart3);
+    auto& uart1 = HAL::UART::get_uart_bus_instance().get_device(HAL::UART::UartDeviceId::HAL_Uart1);
+    if(huart == uart3.get_handle()) {
+        // 调用您的解析函数
+	    BSP::Remote::dr16.Parse(huart, Size);
+        HAL::UART::Data dbus_rx_data{dbus_rx_buffer, sizeof(dbus_rx_buffer)};
 
-//    mini.Parse(huart, Size);
-
-    BSP::Remote::dr16.Parse(huart, Size);
-    BSP::IMU::imu.Parse(huart, Size);
+    }
+    else if(huart == uart1.get_handle())
+    {
+          BSP::IMU::imu.Parse(huart, Size);
+        HAL::UART::Data imu_rx_data{imu_rx_buffer, sizeof(imu_rx_buffer)};
+    }
 }

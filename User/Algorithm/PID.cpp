@@ -7,7 +7,7 @@ void TD::Calc(float u)
     this->x2 += (-2.0f * this->r * this->x2 - this->r * this->r * (this->x1 - this->u)) * this->h;
 }
 
-double PID::GetPidPos(Kpid_t kpid, double feedback, double max)
+double PID::GetPidPos(Kpid_t kpid, double feedback, float max)
 {
     // 输入
     // this->pid.cin = cin;
@@ -49,10 +49,10 @@ double PID::GetPidPos(Kpid_t kpid, double feedback, double max)
     this->pid.cout = this->pid.p + this->pid.i + this->pid.d;
 
     // pid限幅
-    if (this->pid.cout > max)
-        this->pid.cout = max;
-    if (this->pid.cout < -max)
-        this->pid.cout = -max;
+    if (this->pid.cout > this->pid.max)
+        this->pid.cout = this->pid.max;
+    if (this->pid.cout < -this->pid.max)
+        this->pid.cout = -this->pid.max;
 
     return this->pid.cout;
 }

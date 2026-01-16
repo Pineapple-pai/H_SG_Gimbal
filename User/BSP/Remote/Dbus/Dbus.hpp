@@ -1,6 +1,8 @@
 #pragma once
 
 #include "../User/BSP/StaticTime.hpp"
+#include "../User/BSP/Common/StateWatch/state_watch.hpp"
+
 
 #include "stdint.h"
 #include "usart.h"
@@ -142,6 +144,9 @@ class Dr16
 
     RM_StaticTime dirTime;
 
+    BSP::WATCH_STATE::StateWatch remote_state_watch_{50}; // 50ms超时
+
+
   public: // get方法
     /**
      * @brief 获取遥控器右侧摇杆的值
@@ -216,6 +221,18 @@ class Dr16
     inline double sw()
     {
         return sw_;
+    }
+
+    /**
+     * @brief 检测遥控器是否断联
+     * @return true 断联
+     * @return false 在线
+     */
+    inline bool isOffline()
+    {
+        remote_state_watch_.UpdateTime();
+        remote_state_watch_.CheckStatus();
+        return remote_state_watch_.GetStatus() == BSP::WATCH_STATE::Status::OFFLINE;
     }
 };
 

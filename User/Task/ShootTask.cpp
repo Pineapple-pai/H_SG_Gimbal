@@ -1,17 +1,20 @@
 #include "../Task/ShootTask.hpp"
 #include "../Task/CommunicationTask.hpp"
+
 #include "../APP/Mod/RemoteModeManager.hpp"
+
 #include "../APP/Tools.hpp"
+
 #include "../BSP/Motor/Dji/DjiMotor.hpp"
-#include "../BSP/Motor/Dm/DmMotor.hpp"
-#include "../APP/Variable.hpp"
+
 #include "cmsis_os2.h"
 float hz_send;
 
 uint32_t firetime;
 uint8_t firenum;
 uint32_t fireMS;
-
+float tar_angle = 0.0f;
+uint32_t Send_ms = 0;
 void ShootTask(void *argument)
 {
     for (;;)
@@ -35,7 +38,7 @@ void ShootTask(void *argument)
 
         TASK::Shoot::shoot_fsm.Control();
 
-        osDelay(1);
+        osDelay(5); 
     }
 }
 
@@ -43,17 +46,14 @@ namespace TASK::Shoot
 {
 // 构造函数定义，使用初始化列表
 Class_ShootFSM::Class_ShootFSM()
-		: //Adrc_Friction_L(Alg::LADRC::TDquadratic(100, 0.001), 10, 0.1, 40, 0.001, 1000),
-      //Adrc_Friction_R(Alg::LADRC::TDquadratic(100, 0.001), 10, 0.1, 40, 0.001, 1000),
-      //Kpid_Friction_L_vel(0, 0, 0),
-      //Kpid_Friction_R_vel(0, 0, 0),
+    : 
       adrc_Dail_vel(Alg::LADRC::TDquadratic(200, 0.001), 5, 40, 0.9, 0.001, 16384),
       // 位置pid增益
-      Kpid_Dail_pos(10, 0, 0),
+      //Kpid_Dail_pos(10, 0, 0),
       // 速度pid增益
-      Kpid_Dail_vel(200, 0, 0),
+      //Kpid_Dail_vel(200, 0, 0),
       // 热量限制初始化
-      Heat_Limit(100, 30.f) // 示例参数：窗口大小50，阈值10.0
+      Heat_Limit(100, 55.0f) // 示例参数：窗口大小50，阈值10.0
 {
     // 初始化卡弹检测状态机
     JammingFMS.Set_Status(Jamming_Status::NORMAL);
@@ -114,23 +114,20 @@ void Class_ShootFSM::UpState()
     {
     case (Booster_Status::DISABLE): {
         // 如何失能状态，拨盘力矩为0，摩擦轮期望值为0
-        // Adrc_Friction_L.setTarget(0);
-        // Adrc_Friction_R.setTarget(0);
-        pid_Motor_Friction_L_vel.setTarget(0);
-        pid_Motor_Friction_R_vel.setTarget(0);
-        float current_angle = BSP::Motor::Dji::Motor2006.getAddAngleDeg(1);
-        adrc_Dail_vel.setTarget(current_angle);         
+        Adrc_Friction_L.setTarget(0.0f);
+        Adrc_Friction_R.setTarget(0.0f);
 
+		float current_angle = BSP::Motor::Dji::Motor2006.getAddAngleDeg(1);
+
+        adrc_Dail_vel.setTarget(current_angle);
         break;
     }
     case (Booster_Status::ONLY): {
         // 单发模式
         // 设置摩擦轮速度，与连发模式相同
+        Adrc_Friction_L.setTarget(-target_friction_omega);
+        Adrc_Friction_R.setTarget(target_friction_omega);
 
-        // Adrc_Friction_L.setTarget(-target_friction_omega);
-        // Adrc_Friction_R.setTarget(target_friction_omega);
-        pid_Motor_Friction_L_vel.setTarget(target_friction_omega);
-        pid_Motor_Friction_R_vel.setTarget(-target_friction_omega);
         // 热量限制（滑动窗口，需要持续计算）
         HeatLimit();
 
@@ -168,10 +165,9 @@ void Class_ShootFSM::UpState()
     }
     case (Booster_Status::AUTO): {
         // 连发模式
-        // Adrc_Friction_L.setTarget(-target_friction_omega);
-        // Adrc_Friction_R.setTarget(target_friction_omega);
-        pid_Motor_Friction_L_vel.setTarget(target_friction_omega);
-        pid_Motor_Friction_R_vel.setTarget(-target_friction_omega);
+        Adrc_Friction_L.setTarget(-target_friction_omega);
+        Adrc_Friction_R.setTarget(target_friction_omega);
+
         auto *remote = Mode::RemoteModeManager::Instance().getActiveController();
 
         // 获取目标发射频率（Hz）
@@ -186,7 +182,7 @@ void Class_ShootFSM::UpState()
         HeatLimit();
 
         // 应用热量限制
-        //target_fire_hz = Tools.clamp(target_fire_hz, Heat_Limit.getCurrentFireRate(), 0.0f);
+        target_fire_hz = Tools.clamp(target_fire_hz, Heat_Limit.getCurrentFireRate(), 0.0f);
 
         // 获取当前角度
         float current_angle = BSP::Motor::Dji::Motor2006.getAddAngleDeg(1);
@@ -204,45 +200,21 @@ void Class_ShootFSM::UpState()
 
 void Class_ShootFSM::Control(void)
 {
-    // 摩擦轮控制 - 保持1kHz
-    auto velL = BSP::Motor::DM::Motor2325.getVelocityRads(1) + 0.048843;
-    auto velR = BSP::Motor::DM::Motor2325.getVelocityRads(2) + 0.048843;
+    auto velL = BSP::Motor::Dji::Motor3508.getVelocityRpm(1);
+    auto velR = BSP::Motor::Dji::Motor3508.getVelocityRpm(2);
     auto DailVel = BSP::Motor::Dji::Motor2006.getVelocityRpm(1);
     auto Dail_pos = BSP::Motor::Dji::Motor2006.getAddAngleDeg(1);
-    switch (Now_Status_Serial) {
-        case Booster_Status::DISABLE:
-            // Adrc_Friction_L.setTarget(0);
-            // Adrc_Friction_R.setTarget(0);
-            // Adrc_Friction_L.reSet();
-            // Adrc_Friction_R.reSet();
-            // Motor_Friction_L_Out = Adrc_Friction_L.UpData(velL);
-            // Motor_Friction_R_Out = Adrc_Friction_R.UpData(velR);
-
-            pid_Motor_Friction_L_vel.setTarget(0);
-            pid_Motor_Friction_R_vel.setTarget(0);
-            Motor_Friction_L_Out = pid_Motor_Friction_L_vel.GetPidPos(Kpid_Friction_L_vel,velL, 500.0f);
-            Motor_Friction_R_Out = pid_Motor_Friction_R_vel.GetPidPos(Kpid_Friction_R_vel,velR, 500.0f);
-            break;
-        case Booster_Status::ONLY:
-        case Booster_Status::AUTO:
-            // Adrc_Friction_L.setTarget(-target_friction_omega);
-            // Adrc_Friction_R.setTarget(target_friction_omega);
-            // Motor_Friction_L_Out = Adrc_Friction_L.UpData(velL);
-            // Motor_Friction_R_Out = Adrc_Friction_R.UpData(velR);
-            pid_Motor_Friction_L_vel.setTarget(target_friction_omega);
-            pid_Motor_Friction_R_vel.setTarget(-target_friction_omega);
-            Motor_Friction_L_Out = pid_Motor_Friction_L_vel.GetPidPos(Kpid_Friction_L_vel,velL, 500.0f);
-            Motor_Friction_R_Out = pid_Motor_Friction_R_vel.GetPidPos(Kpid_Friction_R_vel,velR, 500.0f);
-            break;
-    }
-    
     UpState();
-       
-        // 如果卡弹就让期望等于反馈
+    // 控制摩擦轮
+    Adrc_Friction_L.UpData(velL);
+    Adrc_Friction_R.UpData(velR);
+
+    // 如果卡弹就让期望等于反馈
     if (JammingFMS.Get_Now_Status_Serial() == Jamming_Status::PROCESSING)
         Dail_target_pos = Dail_pos;
 
     // 更新角度pid
+    tar_angle += BSP::Remote::dr16.remoteLeft().x;
     pid_Dail_pos.setTarget(Dail_target_pos);
     pid_Dail_pos.GetPidPos(Kpid_Dail_pos, Dail_pos, 16384.0f);
 
@@ -254,27 +226,29 @@ void Class_ShootFSM::Control(void)
 
     // 卡弹检测
     Jamming(Dail_pos, pid_Dail_pos.GetErr());
-    // Tools.vofaSend( BSP::Motor::DM::Motor2325.getVelocityRads(1) + 0.048843,BSP::Motor::DM::Motor2325.getTorque(1),
-    //                 BSP::Motor::DM::Motor2325.getVelocityRads(2) + 0.048843,BSP::Motor::DM::Motor2325.getTorque(2),
-    //                 BSP::Motor::Dji::Motor2006.getVelocityRpm(1),BSP::Motor::Dji::Motor2006.getTorque(1));
-    Tools.vofaSend(Heat_Limit.getFireCount(), BSP::Motor::DM::Motor2325.getVelocityRads(1), BSP::Motor::DM::Motor2325.getVelocityRads(2), 
-    BSP::Motor::DM::Motor2325.getTorque(1), BSP::Motor::DM::Motor2325.getTorque(2), BSP::Motor::DM::Motor2325.getDmRpm(1));
+    // 拨盘发送
+//    Tools.vofaSend(Dail_target_pos, Dail_pos, fire_flag, Heat_Limit.getFireNum(), 0, 0);
+    // 摩擦轮发送
+    // Tools.vofaSend(Adrc_Friction_L.getZ1(), Adrc_Friction_L.getTarget(),
+    // Adrc_Friction_L.getFeedback(),
+    //                Adrc_Friction_R.getZ1(), Adrc_Friction_R.getTarget(),
+    //                Adrc_Friction_R.getFeedback());
+
+    // // 火控
+    Tools.vofaSend(Adrc_Friction_R.getZ1(),BSP::Motor::Dji::Motor3508.getVelocityRpm(2),
+                    target_friction_omega, 0, 0, 0);
+
     CAN_Send();
 }
 
 void Class_ShootFSM::HeatLimit()
 {
-    // auto CurL = BSP::Motor::Dji::Motor3508.getTorque(1);
-    // auto CurR = BSP::Motor::Dji::Motor3508.getTorque(2);
+    auto CurL = BSP::Motor::Dji::Motor3508.getTorque(1);
+    auto CurR = BSP::Motor::Dji::Motor3508.getTorque(2);
 
-    // auto velL = BSP::Motor::Dji::Motor3508.getVelocityRpm(1);
-    // auto velR = BSP::Motor::Dji::Motor3508.getVelocityRpm(2);
+    auto velL = BSP::Motor::Dji::Motor3508.getVelocityRpm(1);
+    auto velR = BSP::Motor::Dji::Motor3508.getVelocityRpm(2);
 
-    auto CurL = BSP::Motor::DM::Motor2325.getTorque(1);
-    auto CurR = BSP::Motor::DM::Motor2325.getTorque(2);
-
-    auto velL = BSP::Motor::DM::Motor2325.getVelocityRads(1);
-    auto velR = BSP::Motor::DM::Motor2325.getVelocityRads(2);
 	//如果发0则为断连
 	if(Gimbal_to_Chassis_Data.getBoosterHeatLimit() != 0)
 	{
@@ -286,24 +260,21 @@ void Class_ShootFSM::HeatLimit()
     Heat_Limit.setFrictionVelocity(velL, velR);
     // Heat_Limit.setTargetFire(target_fire_hz);
 
-    Heat_Limit.UpDate();
+    //Heat_Limit.UpDate();
 }
 
 void Class_ShootFSM::CAN_Send(void)
 {
-    if(Now_Status_Serial == Booster_Status::ONLY || Now_Status_Serial == Booster_Status::AUTO)
-    {
-        BSP::Motor::DM::Motor2325.ctrl_Motor(&hcan2, 1, 0, 0, 0, 0, (Motor_Friction_L_Out / 100.0f));
-        BSP::Motor::DM::Motor2325.ctrl_Motor(&hcan2, 2, 0, 0, 0, 0, -(Motor_Friction_L_Out / 100.0f));
-    }
-    else if(Now_Status_Serial == Booster_Status::DISABLE)
-    {
-        BSP::Motor::DM::Motor2325.ctrl_Motor(&hcan2, 1, 0, 0, 0, 0,0);
-        BSP::Motor::DM::Motor2325.ctrl_Motor(&hcan2, 2, 0, 0, 0, 0,0);
-    }
-
+    BSP::Motor::Dji::Motor3508.setCAN(Adrc_Friction_L.getU(), 2);
+    BSP::Motor::Dji::Motor3508.setCAN(Adrc_Friction_R.getU(), 3);
     BSP::Motor::Dji::Motor3508.setCAN(target_Dail_torque, 1);
-    BSP::Motor::Dji::Motor3508.sendCAN(&hcan1, 1);
+    
+    // if(Send_ms == 0)
+    // {
+        BSP::Motor::Dji::Motor3508.sendCAN();
+    // }
+    Send_ms++;
+    Send_ms %= 2; 
 
 }
 
@@ -343,43 +314,59 @@ float Class_ShootFSM::hz_to_angle(float fire_hz)
  */
 void Class_ShootFSM::Jamming(float angle, float err)
 {
-    static uint8_t blocking_flag;
-    static uint32_t blocking_time;
-    static uint32_t time_tick;
-    static int64_t angle_sum_prev;
-
-    // 此次转子位置大于上次转子位置两圈
-    if (fabs(err) > 120)
+    static uint8_t blocking_flag = 0;
+    static uint32_t blocking_time = 0;
+    static uint32_t check_time = 0;
+    static float last_angle = 0;
+    
+    // 初始化
+    if (check_time == 0)
     {
-        // 未在退弹过程中，每300ms检测一次是否卡弹
-        if ((HAL_GetTick() - time_tick) > 300 && blocking_flag == 0)
-        {
-            //
-            if (fabs(angle - angle_sum_prev) < 120)
-            {
-                blocking_flag = 1;
-                blocking_time = HAL_GetTick();
-            }
-            angle_sum_prev = angle;
-            time_tick = HAL_GetTick();
-        }
+        check_time = HAL_GetTick();
+        last_angle = angle;
+        return;
     }
-    // 进行退弹
+
+    // 退弹处理中
     if (blocking_flag)
     {
-        // 退弹已超150ms
-        if (HAL_GetTick() - blocking_time > 150)
+        if (HAL_GetTick() - blocking_time > 200)
         {
-            blocking_flag = 0; // 清除卡弹标志
+            blocking_flag = 0;
+            last_angle = angle;
+            check_time = HAL_GetTick();
         }
-        // 退弹过程中
         else
         {
-            // 实际值跟随目标值 防止恢复瞬间转大角度
             Dail_target_pos = angle;
-            target_Dail_torque = 5000; // 反向输出
+            target_Dail_torque = -5000;  // 反向退弹
         }
+        return;
     }
+
+    // 每 200ms 检测一次
+    if (HAL_GetTick() - check_time < 200)
+        return;
+
+    // 堵转判定条件：
+    // 1. 输出力矩大
+    // 2. 位置误差大
+    // 3. 角度变化小
+    float angle_change = fabs(angle - last_angle);
+    bool high_torque = fabs(target_Dail_torque) > 8000;
+    bool large_error = fabs(err) > 30;
+    bool not_moving = angle_change < 10;
+
+    if (high_torque && large_error && not_moving)
+    {
+        blocking_flag = 1;
+        blocking_time = HAL_GetTick();
+    }
+
+    // 更新检测基准
+    last_angle = angle;
+    check_time = HAL_GetTick();
 }
+
 
 } // namespace TASK::Shoot

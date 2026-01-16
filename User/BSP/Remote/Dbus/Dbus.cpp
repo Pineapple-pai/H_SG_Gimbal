@@ -75,6 +75,7 @@ void Dr16::Parse(UART_HandleTypeDef *huart, int Size)
         SaveData(pData);
         UpdateStatus();
         dirTime.UpLastTime();
+        remote_state_watch_.UpdateLastTime();
     }
     HAL_UARTEx_ReceiveToIdle_DMA(&ClickerHuart, pData, sizeof(pData));
 }
@@ -120,4 +121,5 @@ bool Dr16::ISDir()
 
     return Dir_Flag;
 }
+
 } // namespace BSP::Remote

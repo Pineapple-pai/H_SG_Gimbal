@@ -1,4 +1,4 @@
-#include "../APP/Heat_Control.hpp"
+#include "../../APP/Heat_Detector/Heat_Control.hpp"
 #include "../../User/BSP/DWT/DWT.hpp" // 用于时间计算
 #include "math.h"
 namespace HeatControl {

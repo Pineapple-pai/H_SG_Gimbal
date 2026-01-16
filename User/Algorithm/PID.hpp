@@ -46,6 +46,7 @@ typedef struct
     double Dp, Di, Dd;
     // 误差
     double last_e, last_last_e, now_e;
+    float max;
     // td跟踪微分器，跟踪误差
     TD td_e;
     // 限幅
@@ -65,10 +66,10 @@ class PID
         this->pid.Break_I = Ierror;
         this->pid.MixI = MixI;
 
-        this->pid.td_e.r = 100;
+        this->pid.td_e.r = 200;
     }
     // 位置式pid获取
-    double GetPidPos(Kpid_t kpid, double feedback, double max);
+    double GetPidPos(Kpid_t kpid, double feedback, float max);
     // 清除pid
     void clearPID()
     {

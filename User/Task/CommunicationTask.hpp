@@ -3,47 +3,30 @@
 #include "../APP/Tools.hpp"
 #include "../BSP/stdxxx.hpp"
 #include "../Task/EvenTask.hpp"
+
 namespace Communicat
 {
 // CAN通信相关定义
-#define CAN_GIMBAL_TO_CHASSIS_BASE_ID 0x400  // 云台->底盘基础ID
-#define CAN_G2C_FRAME1_ID 0x401              // 第一帧ID
-#define CAN_G2C_FRAME2_ID 0x402              // 第二帧ID
-#define CAN_G2C_FRAME3_ID 0x403              // 第三帧ID
+#define CAN_G2C_FRAME1_ID 0x205              // 第一帧ID
+#define CAN_G2C_FRAME2_ID 0x206              // 第二帧ID
 
-#define CAN_CHASSIS_TO_GIMBAL_BASE_ID 0x300  // 底盘->云台基础ID
-#define CAN_C2G_FRAME1_ID 0x301              // 第一帧ID
-#define CAN_C2G_FRAME2_ID 0x302              // 第二帧ID
-#define CAN_C2G_FRAME3_ID 0x303              // 第三帧ID
+#define CAN_CHASSIS_TO_GIMBAL_ID 0x207       // 底盘->云台接收ID (单帧)
 class Gimbal_to_Chassis
 {
   public:
     void Data_send();
-    void Receive();
     void HandleCANMessage(uint32_t std_id, uint8_t* data);
   private:
     float CalcuGimbalToChassisAngle();
-    void ParseCANFrame(uint32_t std_id, uint8_t* data);
-    void ProcessReceivedData();
 
     uint8_t head = 0xA5; // 帧头
     uint8_t len;
-    int16_t Init_Angle = 16.0f;
+    int16_t Init_Angle = -119.32f;
     int16_t target_offset_angle = 0;
-		// 帧配置结构
-    struct FrameConfig {
-        uint32_t id;
-        uint16_t offset;
-        uint8_t size;
-        bool* received_flag;
-    };
-    
-    // 帧配置数组
-    FrameConfig frame_configs[3] = {
-        {CAN_C2G_FRAME1_ID, 0, 8, &frame1_received},
-        {CAN_C2G_FRAME2_ID, 8, 8, &frame2_received},
-        {CAN_C2G_FRAME3_ID, 16, 7, &frame3_received}
-    };
+
+    // 接收帧头定义
+    static constexpr uint8_t RX_FRAME_HEAD1 = 0x21;
+    static constexpr uint8_t RX_FRAME_HEAD2 = 0x12;
     struct __attribute__((packed)) Direction // 方向结构体
     {
         uint8_t LX;
@@ -75,40 +58,26 @@ class Gimbal_to_Chassis
         uint8_t aim_y;
     };
 
-    struct __attribute__((packed)) RxRefree // 云台数据
+    struct __attribute__((packed)) RxRefree // 裁判系统数据 (单帧接收，含双字节帧头)
     {
-        uint8_t heat_one;
-        uint8_t heat_two;
-
+        uint8_t head1;              // 帧头1: 0x21
+        uint8_t head2;              // 帧头2: 0x12
         uint16_t booster_heat_cd;
         uint16_t booster_heat_max;
         uint16_t booster_now_heat;
     };
-		
-		struct __attribute__((packed)) IMU //IMU数据
-		{
-			float yaw;
-			float pitch;
-		};
-    // CAN发送缓冲区
-    uint8_t can_tx_buffer[3][8]; // 3帧，每帧8字节
+
+    // CAN发送缓冲区 - 两帧
+    uint8_t can_tx_buffer[2][8];
     
-    // CAN接收相关
-    uint8_t can_rx_buffer[23]; // 16字节缓冲区用于重组数据
-    bool frame1_received = false;
-    bool frame2_received = false;
-    bool frame3_received = false;
+    // CAN接收相关 - 简化为单帧
     uint32_t last_frame_time = 0;
     static constexpr uint32_t FRAME_TIMEOUT = 50; // 50ms超时
-
-    uint8_t buffer[20];
-    uint8_t rx_buffer[8];
 
     Direction direction;
     ChassisMode chassis_mode;
     UiList ui_list;
     RxRefree rx_refree;
-    IMU i_mu;
 		
   public:
     void set_LX(double LX);

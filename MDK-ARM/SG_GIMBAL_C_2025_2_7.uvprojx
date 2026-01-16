@@ -772,16 +772,6 @@
           <GroupName>HAL</GroupName>
           <Files>
             <File>
-              <FileName>HAL.cpp</FileName>
-              <FileType>8</FileType>
-              <FilePath>..\User\HAL\HAL.cpp</FilePath>
-            </File>
-            <File>
-              <FileName>My_HAL.cpp</FileName>
-              <FileType>8</FileType>
-              <FilePath>..\User\HAL\My_HAL.cpp</FilePath>
-            </File>
-            <File>
               <FileName>can_hal.hpp</FileName>
               <FileType>5</FileType>
               <FilePath>..\User\HAL\CAN\can_hal.hpp</FilePath>
@@ -805,6 +795,31 @@
               <FileName>can_device.cpp</FileName>
               <FileType>8</FileType>
               <FilePath>..\User\HAL\CAN\interface\can_device.cpp</FilePath>
+            </File>
+            <File>
+              <FileName>uart_bus_impl.cpp</FileName>
+              <FileType>8</FileType>
+              <FilePath>..\User\HAL\UART\impl\uart_bus_impl.cpp</FilePath>
+            </File>
+            <File>
+              <FileName>uart_device_impl.cpp</FileName>
+              <FileType>8</FileType>
+              <FilePath>..\User\HAL\UART\impl\uart_device_impl.cpp</FilePath>
+            </File>
+            <File>
+              <FileName>uart_bus.cpp</FileName>
+              <FileType>8</FileType>
+              <FilePath>..\User\HAL\UART\interface\uart_bus.cpp</FilePath>
+            </File>
+            <File>
+              <FileName>uart_device.hpp</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\User\HAL\UART\interface\uart_device.hpp</FilePath>
+            </File>
+            <File>
+              <FileName>uart_hal.hpp</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\User\HAL\UART\uart_hal.hpp</FilePath>
             </File>
           </Files>
         </Group>
@@ -841,6 +856,16 @@
               <FileType>5</FileType>
               <FilePath>..\User\BSP\Motor\Dji\DjiMotor.hpp</FilePath>
             </File>
+            <File>
+              <FileName>state_watch.cpp</FileName>
+              <FileType>8</FileType>
+              <FilePath>..\User\BSP\Common\StateWatch\state_watch.cpp</FilePath>
+            </File>
+            <File>
+              <FileName>buzzer_manager.cpp</FileName>
+              <FileType>8</FileType>
+              <FilePath>..\User\BSP\Common\StateWatch\buzzer_manager.cpp</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
@@ -867,11 +892,6 @@
               <FilePath>..\User\APP\Variable.cpp</FilePath>
             </File>
             <File>
-              <FileName>Heat_Detector.cpp</FileName>
-              <FileType>8</FileType>
-              <FilePath>..\User\APP\Heat_Detector\Heat_Detector.cpp</FilePath>
-            </File>
-            <File>
               <FileName>KeyBroad.cpp</FileName>
               <FileType>8</FileType>
               <FilePath>..\User\APP\KeyBorad\KeyBroad.cpp</FilePath>
@@ -879,7 +899,7 @@
             <File>
               <FileName>Heat_Control.cpp</FileName>
               <FileType>8</FileType>
-              <FilePath>..\User\APP\Heat_Control.cpp</FilePath>
+              <FilePath>..\User\APP\Heat_Detector\Heat_Control.cpp</FilePath>
             </File>
           </Files>
         </Group>
