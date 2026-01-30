@@ -21,7 +21,7 @@ class Gimbal_to_Chassis
 
     uint8_t head = 0xA5; // 帧头
     uint8_t len;
-    int16_t Init_Angle = -119.32f;
+    int16_t Init_Angle = -73;
     int16_t target_offset_angle = 0;
 
     // 接收帧头定义
@@ -54,8 +54,10 @@ class Gimbal_to_Chassis
         uint8_t UI_F5 : 1;
         uint8_t Shift : 1;
         uint8_t Vision : 2;
+        uint8_t friction_enabled : 1;
         uint8_t aim_x;
         uint8_t aim_y;
+        int16_t projectile_count;
     };
 
     struct __attribute__((packed)) RxRefree // 裁判系统数据 (单帧接收，含双字节帧头)
@@ -183,7 +185,7 @@ class Vision
     Rx_Other rx_other;
 
     uint8_t Tx_pData[18];
-    uint8_t Rx_pData[19];
+
 
     bool fire_flag;
     uint32_t fire_num;

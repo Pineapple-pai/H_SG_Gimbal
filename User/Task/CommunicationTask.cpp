@@ -1,4 +1,5 @@
 #include "../Task/CommunicationTask.hpp"
+#include "../Task/ShootTask.hpp"
 
 #include "../APP/Mod/RemoteModeManager.hpp"
 #include "../APP/Tools.hpp"
@@ -20,8 +21,12 @@
 #define SIZE 8
 uint8_t format[15];
 uint64_t i;
-
+    uint8_t Rx_pData[19];
 Communicat::Gimbal_to_Chassis Gimbal_to_Chassis_Data;
+
+// Debug variables for watching in debugger
+Communicat::Vision::Rx_Target debug_rx_target;
+Communicat::Vision::Rx_Other debug_rx_other;
 
 // delay PID测试
 float time_kp = 2.0, time_out, int_time = 5;
@@ -36,7 +41,7 @@ void CommunicationTask(void *argument)
         Gimbal_to_Chassis_Data.Data_send();
         // Gimbal_to_Chassis_Data.Receive();
 
-        osDelay(20);
+        osDelay(4);
     }
 }
 
@@ -85,7 +90,9 @@ void Gimbal_to_Chassis::Data_send()
     chassis_mode.Follow_mode = remote->isFollowMode();
     chassis_mode.Rotating_mode = remote->isRotatingMode();
     chassis_mode.KeyBoard_mode = remote->isKeyboardMode();
+
     chassis_mode.stop = remote->isStopMode();
+    ui_list.friction_enabled = TASK::Shoot::shoot_fsm.getFrictionState();
 
     if (chassis_mode.Rotating_mode)
         direction.Rotating_vel = channel_to_uint8(BSP::Remote::dr16.sw());
@@ -98,15 +105,18 @@ void Gimbal_to_Chassis::Data_send()
         ui_list.Vision = 0;
     }
 
+
     ui_list.aim_x = vision.getAimX();
     ui_list.aim_y = vision.getAimY();
+    ui_list.projectile_count = TASK::Shoot::shoot_fsm.getProjectileCount();
 
-    // 计算总数据长度 - 两帧发送 (移除i_mu)
+    // 计算总数据长度 - 两帧发送
     // Frame1: Head(1) + Direction前7字节 = 8字节
-    // Frame2: Direction后2字节 + ChassisMode(1) + UiList(3) + 填充(2) = 8字节
-    len = sizeof(direction) + sizeof(chassis_mode) + sizeof(ui_list) + 1; //+1帧头
-    uint8_t tx_data[14];
+    // Frame2: Direction后2字节 + ChassisMode(1) + UiList(5) = 8字节
+
     // 使用临时指针将数据拷贝到缓冲区
+    len = sizeof(direction) + sizeof(chassis_mode) + sizeof(ui_list) + 1;
+    uint8_t tx_data[16];
     auto temp_ptr = tx_data;
 
     *temp_ptr = head;
@@ -140,16 +150,14 @@ void Gimbal_to_Chassis::Data_send()
     std::memcpy(frame1.data, can_tx_buffer[0], 8);
     can2.send(frame1);
     
-    // 第二帧: Direction后2字节 + ChassisMode + UiList + 填充
     HAL::CAN::Frame frame2;
     frame2.id = CAN_G2C_FRAME2_ID;
     frame2.dlc = 8;
     frame2.is_extended_id = false;
     frame2.is_remote_frame = false;
     
-    std::memcpy(can_tx_buffer[1], tx_data + 8, 6);  // 剩余6字节数据
-    can_tx_buffer[1][6] = 0;  // 填充
-    can_tx_buffer[1][7] = 0;  // 填充
+    std::memcpy(can_tx_buffer[1], tx_data + 8, 8);  // 剩余8字节数据
+
     std::memcpy(frame2.data, can_tx_buffer[1], 8);
     can2.send(frame2);
 }
@@ -172,10 +180,10 @@ void Gimbal_to_Chassis::HandleCANMessage(uint32_t std_id, uint8_t* data)
 float Gimbal_to_Chassis::CalcuGimbalToChassisAngle()
 {
 
-    float encoder_angle = BSP::Motor::DM::Motor4310.getAngleDeg(2);
+    float encoder_angle = BSP::Motor::DM::Motor4310.getAngle0_360(2, 1.0f);
 
     // 计算最终角度误差 --------------------------------------------------
-    return Tools.Zero_crossing_processing(Init_Angle, encoder_angle, 180.0f) - encoder_angle;
+    return Tools.Zero_crossing_processing(Init_Angle, encoder_angle, 360.0f) - encoder_angle;
 }
 
 float rx_angle;
@@ -191,7 +199,7 @@ void Vision::Data_send()
     frame.head_two = 0x39;
 
     tx_gimbal.yaw_angle = BSP::IMU::imu.getAddYaw() * 100;
-    tx_gimbal.pitch_angle = BSP::Motor::DM::Motor4310.getAngleDeg(1) * 100;
+    tx_gimbal.pitch_angle = BSP::IMU::imu.getPitch() * 100;
 
     tx_other.bullet_rate = 26;
     tx_other.enemy_color = 0x52; // 0x42我红   0X52我蓝
@@ -232,6 +240,8 @@ void Vision::Data_send()
 
 void Vision::dataReceive()
 {
+    //static uint32_t last_vision_update_tick = 0; 
+
     uint32_t rx_len = 19;
 
     CDC_Receive_FS(Rx_pData, &rx_len);
@@ -240,12 +250,11 @@ void Vision::dataReceive()
     {
         rx_target.pitch_angle = (Rx_pData[2] << 24 | Rx_pData[3] << 16 | Rx_pData[4] << 8 | Rx_pData[5]) / 100.0;
         rx_target.yaw_angle = (Rx_pData[6] << 24 | Rx_pData[7] << 16 | Rx_pData[8] << 8 | Rx_pData[9]) / 100.0;
-
-        if ((fabs(rx_target.yaw_angle) > 25 && fabs(rx_target.pitch_angle) > 25) || rx_other.vision_ready == false)
+        rx_other.vision_ready = Rx_pData[10];
+	
+        if (rx_other.vision_ready == false || rx_other.vision_ready == 0)
         {
             vision_flag = false;
-            rx_target.yaw_angle = 0;
-            rx_target.pitch_angle = 0;
         }
         else
         {
@@ -253,25 +262,29 @@ void Vision::dataReceive()
         }
 
 		//如果视觉时间戳差值大于100ms，判断为断连
-		if(vision_flag == true && send_time - rx_target.time > 100)
-		{
-			vision_flag = false;
-		}
+//		if(vision_flag == true && send_time - rx_target.time > 100)
+//		{
+//			vision_flag = false;
+//		}
 		
-        //		if((rx_other.vision_ready == false))
+        //		if((rx_other.vision_ready == false))    
         //			vision_flag = false;
         //		else
         //			vision_flag = true;
 
-        yaw_angle_ = rx_target.yaw_angle + BSP::IMU::imu.getAddYaw();
-        pitch_angle_ = (rx_target.pitch_angle - BSP::Motor::DM::Motor4310.getAngleDeg(1));
-        pitch_angle_ *= -1.0; // 每台方向不同
+        yaw_angle_ = rx_target.yaw_angle - BSP::Motor::DM::Motor4310.getAngleDeg(2);
+        pitch_angle_ = rx_target.pitch_angle + BSP::Motor::DM::Motor4310.getAngleDeg(1);
+        //pitch_angle_ *= -1.0; // 每台方向不同
+        yaw_angle_ *= -1.0;
 
-        rx_other.vision_ready = Rx_pData[10];
         rx_other.fire = (Rx_pData[11]);
         rx_other.tail = Rx_pData[12];
         rx_other.aim_x = Rx_pData[17];
         rx_other.aim_y = Rx_pData[18];
+
+        // Update debug variables
+        debug_rx_target = rx_target;
+        debug_rx_other = rx_other;
     }
 }
 }; // namespace Communicat

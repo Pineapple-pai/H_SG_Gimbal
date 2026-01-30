@@ -29,8 +29,8 @@ void Adrc::ESOCalc(float target, float feedback)
     e = feedback_ - this->z1;
     z1 += (z2 + beta1 * e + b0_ * this->u) * this->h_;
     z2 += beta2 * e * h_;
-
-    z2 *= 0.99f;
+    
+		z2 *= 0.99;
 }
 
 void Adrc::SefCalc()

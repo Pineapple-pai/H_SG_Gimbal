@@ -36,6 +36,12 @@ extern Kpid_t Kpid_Friction_R_vel;
 extern PID pid_Friction_L_vel;
 extern PID pid_Friction_R_vel;
 
+// DM3508摩擦轮PID控制
+extern Kpid_t Kpid_3508_Friction_L;
+extern Kpid_t Kpid_3508_Friction_R;
+extern PID pid_3508_Friction_L;
+extern PID pid_3508_Friction_R;
+
 extern Alg::LADRC::Adrc Adrc_yaw_vel;
 extern Alg::LADRC::Adrc Adrc_pitch_vel;
 

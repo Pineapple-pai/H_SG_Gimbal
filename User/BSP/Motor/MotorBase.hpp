@@ -194,6 +194,26 @@ namespace BSP::Motor
         }
 
         /**
+         * @brief 获取0-360范围的角度
+         * @param id 电机ID (1~N)
+         * @return float 0-360度
+         */
+        float getAngle0_360(uint8_t id, float ratio = 1.0f)
+        {
+            float total_angle = this->unit_data_[id - 1].add_angle;
+            
+            // 考虑减速比
+            float output_angle = total_angle / ratio;
+
+            // 归一化到 0-360
+            float result = (float)fmod(output_angle, 360.0f);
+            if (result < 0.0f)
+            {
+                result += 360.0f;
+            }
+            return result;
+        }
+        /**
          * @brief 获取掉线的电机编号
          *
          * @return 掉线的电机编号（1-N），如果都在线则返回0

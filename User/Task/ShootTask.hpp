@@ -60,12 +60,71 @@ class Class_JammingFSM : public Class_FSM
 };
 
 /**
- * @brief 使用中科大的有限状态机实现发射机构相关逻辑
- *
+ * @brief 单击检测状态类型
  */
+enum Click_Status
+{
+    CLICK_DISABLE, // 失能
+    PRESS_DOWN,    // 按下
+    CLICK,         // 单击
+    LONG_PRESS,    // 长按
+    RELEASE,       // 放开
+};
+
+/**
+ * @brief 单击有限状态机
+ */
+class Class_ClickFSM : public Class_FSM
+{
+  public:
+    void UpState(bool key_pressed);
+    
+    // 获取当前是否为单击状态
+    bool isClick() { return Now_Status_Serial == Click_Status::CLICK; }
+
+  private:
+    static constexpr uint32_t click_time_threshold = 200; // 单击时间阈值 (ms)
+    uint32_t press_start_time = 0;
+};
+
+/**
+ * @brief 停火检测状态类型
+ */
+enum StopFire_Status
+{
+    STOP_FIRE_DISABLE,   // 失能（默认）
+    STOP_FIRE_ACTIVE,    // 激活（发射中）
+    STOP_FIRE_PROCESSING,// 处理（刹车/停火）
+};
+
+/**
+ * @brief 停火有限状态机
+ */
+class Class_StopFireFSM : public Class_FSM
+{
+  public:
+    void UpState(float current_torque, float time_elapsed_sec);
+
+    // 重置状态机到失能状态
+    void Reset() { Set_Status(StopFire_Status::STOP_FIRE_DISABLE); }
+    
+    // 激活状态机
+    void Activate() { Set_Status(StopFire_Status::STOP_FIRE_ACTIVE); }
+
+    // 是否需要处理（刹车）
+    bool isProcessing() { return Now_Status_Serial == StopFire_Status::STOP_FIRE_PROCESSING; }
+
+  private:
+    // 停火电流/力矩阈值 (对应截图中的8A，这里单位即使是力矩值也需要转换或根据实际单位设定)
+    // 假设 AD值 8A 对应 DjiMotor 的 current/torque 单位，需根据实际情况调整
+    // 一般 3508/2006 的电流反馈 16384 对应 20A， 8A 约为 6553
+    // 但此处传入的是 force/torque，需确认。假设传入的是 torque (current)
+    const float stop_torque_threshold = 8000.0f; // 暂定阈值
+    const float stop_time_threshold = 1.0f;      // 1s 超时
+};
+
 class Class_ShootFSM : public Class_FSM
 {
-
   public:
     // 显式声明构造函数
     Class_ShootFSM();
@@ -90,6 +149,9 @@ class Class_ShootFSM : public Class_FSM
     {
         fire_flag = flag;
     }
+
+    bool getFrictionState();
+    int16_t getProjectileCount();
     
   protected:
     // 初始化相关常量
@@ -117,13 +179,16 @@ class Class_ShootFSM : public Class_FSM
     float target_friction_L_torque = 0;
     float target_friction_R_torque = 0;
 
-    float target_friction_omega = 3900.0f;
+    float target_friction_omega = 5900.0f;
     float target_torque = 1.5f;
     float target_fire_hz;
-    float Max_dail_angle = 28.0f; // 拨盘最快频率
+    float Max_dail_angle = 25.0f; // 拨盘最快频率
     float Motor_Friction_L_Out = 0.0f;
     float Motor_Friction_R_Out = 0.0f;
-    Class_JammingFSM JammingFMS;  
+    
+    Class_JammingFSM JammingFMS;
+    Class_ClickFSM ClickFSM;        // 新增单击检测状态机
+    Class_StopFireFSM StopFireFSM;  // 新增停火检测状态机
 
     // 开火标志位
     uint8_t fire_flag = 0;

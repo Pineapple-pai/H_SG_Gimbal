@@ -13,7 +13,7 @@ extern uint8_t imu_rx_buffer[82];
 void Init()
 {
     // 初始化CAN总线
-    HAL::CAN::get_can_bus_instance();
+//    HAL::CAN::get_can_bus_instance();
 
     auto& uart1 = HAL::UART::get_uart_bus_instance().get_device(HAL::UART::UartDeviceId::HAL_Uart1);
 	HAL::UART::Data imu_rx_data{imu_rx_buffer, sizeof(imu_rx_buffer)};

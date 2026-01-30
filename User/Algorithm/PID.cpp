@@ -49,10 +49,10 @@ double PID::GetPidPos(Kpid_t kpid, double feedback, float max)
     this->pid.cout = this->pid.p + this->pid.i + this->pid.d;
 
     // pid限幅
-    if (this->pid.cout > this->pid.max)
-        this->pid.cout = this->pid.max;
-    if (this->pid.cout < -this->pid.max)
-        this->pid.cout = -this->pid.max;
+    if (this->pid.cout > max)
+        this->pid.cout = max;
+    if (this->pid.cout < -max)
+        this->pid.cout = -max;
 
     return this->pid.cout;
 }

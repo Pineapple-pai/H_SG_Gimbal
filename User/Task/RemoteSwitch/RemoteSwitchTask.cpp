@@ -160,7 +160,7 @@ void BoosterUpState()
     }
     else if (remote->isLaunchMode())
     {
-        TASK::Shoot::shoot_fsm.setNowStatus(TASK::Shoot::Booster_Status::AUTO);
+        TASK::Shoot::shoot_fsm.setNowStatus(TASK::Shoot::Booster_Status::ONLY);
     }
     else
     {

@@ -35,9 +35,7 @@ class Gimbal : public Class_FSM
     float filter_tar_yaw_vel;
     float filter_tar_yaw_pos;
 
-    // Yaw轴MIT控制参数
-    float yaw_kp = 30.0f;
-    float yaw_kd = 1.2f;
+
 
     // 按键状态
     BSP::Key::SimpleKey DM_state;
@@ -45,6 +43,9 @@ class Gimbal : public Class_FSM
 
     bool is_true_around = false;
     uint32_t true_around_time = 0;
+    
+    // 视觉模式下是否有有效目标
+    bool vision_has_target = false;
 
   public:
     void TurnAround();
