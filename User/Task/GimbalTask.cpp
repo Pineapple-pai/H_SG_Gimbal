@@ -15,11 +15,11 @@
 #include "cmsis_os2.h"
 // ============ 云台控制参数 ============
 // Pitch轴MIT控制参数
-float pitch_Kp = 40.0f;
-float pitch_Kd = 1.5f;
+float pitch_Kp = 0.0f;
+float pitch_Kd = 0.0f;
 
 float pitch_vel_scale = 2.5f;
-float pitch_vel = 0.0f;
+float fliter_pitch_vel = 0.0f;
 
 float pitch_friction_comp = 0.20f; // 阻力补偿前馈
 float pitch_vel_ff_kd = 0.0f;     // 角速度前馈增益
@@ -36,8 +36,8 @@ float yaw_friction_comp = 0.0f;
 float yaw_vel_ff_kd = 0.0f;
 
 // Yaw轴MIT控制参数
-float yaw_kp = 40.0f;
-float yaw_kd = 1.5f;
+float yaw_kp = 0.0f;
+float yaw_kd = 0.0f;
 float yaw_vel_kd = 1.5f;
 // 初始化相关
 static bool gimbal_initialized = false;
@@ -53,6 +53,7 @@ void GimbalTask(void *argument)
     osDelay(500);
     
     static bool motor_enabled = false;
+    static uint32_t last_enable_tick = 0;
     for (;;)
     {
          if (!motor_enabled)
@@ -115,7 +116,7 @@ void Gimbal::UpState()
         // 如果失能则让期望值等于实际值
         filter_tar_yaw_pos = BSP::IMU::imu.getAddYaw();
         filter_tar_yaw_vel = 0;  // 速度期望归零
-        pitch_vel = 0;           // pitch速度期望归零
+        fliter_pitch_vel = 0;           // pitch速度期望归零
 
         filter_tar_pitch = BSP::Motor::DM::Motor4310.getAddAngleDeg(1);
         fliter_tar_yaw = BSP::Motor::DM::Motor4310.getAddAngleDeg(2);
@@ -144,10 +145,10 @@ void Gimbal::UpState()
     }
     case (GIMBAL::KEYBOARD): {
         // 键鼠模式
-        //filter_tar_yaw_vel = remote->getMouseVelX() * 100000;
-        //filter_tar_pitch += remote->getMouseVelY() * 1000;
-        pitch_vel = -remote_ry * pitch_vel_scale;
-	    filter_tar_yaw_vel = remote_rx * yaw_vel_scale;
+        filter_tar_yaw_vel = remote->getMouseVelX() * 500;
+        fliter_pitch_vel = remote->getMouseVelY() * 500;
+        // pitch_vel = -remote_ry * pitch_vel_scale;
+	    // filter_tar_yaw_vel = remote_rx * yaw_vel_scale;
         // 一键掉头
         TurnAround();
         break;
@@ -156,7 +157,7 @@ void Gimbal::UpState()
         filter_tar_yaw_vel = remote_rx * yaw_vel_scale;
 
         filter_tar_pitch += remote_ry * 0.5f;
-        pitch_vel = -remote_ry * pitch_vel_scale;
+        fliter_pitch_vel = -remote_ry * pitch_vel_scale;
         filter_tar_yaw_pos += filter_tar_yaw_vel * 0.004f;
         break;
     }
@@ -177,15 +178,15 @@ void Gimbal::UpState()
     // }
 
     // pitch轴限幅
-    filter_tar_pitch = Tools.clamp(filter_tar_pitch, -92.0f, -146.0f);
-    target_tar_pitch = Tools.clamp(target_tar_pitch, -92.0f, -146.0f);
+    filter_tar_pitch = Tools.clamp(filter_tar_pitch, -92.0f, -148.0f);
+    target_tar_pitch = Tools.clamp(target_tar_pitch, -92.0f, -148.0f);
 
     // 期望值滤波
     tar_yaw.Calc(filter_tar_yaw_pos);
     tar_pitch.Calc(filter_tar_pitch);
 
     tar_yaw_vel.Calc(filter_tar_yaw_vel);
-    tar_pitch_vel.Calc(pitch_vel);
+    tar_pitch_vel.Calc(fliter_pitch_vel);
 
 
     // 设置云台期望值
@@ -199,7 +200,6 @@ void Gimbal::yawControl()
     auto *remote = Mode::RemoteModeManager::Instance().getActiveController();
 
     // 陀螺仪反馈
-    auto cur_yaw_angle = BSP::IMU::imu.getAddYaw();
     auto cur_yaw_vel = BSP::IMU::imu.getGyroZ() * 0.0174532f;
 
     // 根据模式选择控制策略
@@ -225,21 +225,22 @@ void Gimbal::yawControl()
         {
             friction_torque = (tar_yaw_vel.x1 > 0 ? 1 : -1) * yaw_friction_comp;
         }
-        float final_torque = -Adrc_yaw_vel.getU() + friction_torque;
+        float base_torque = -Adrc_yaw_vel.getU() + friction_torque;
+        float cur_yaw_rpm = cur_yaw_vel * 30.0f / 3.1415926f;
+        float vel_err = tar_yaw_vel.x1 - cur_yaw_vel;
+        float ude_comp = yaw_ude.UdeCalcDt(cur_yaw_rpm, base_torque, vel_err, 0.004f);
+        float final_torque = base_torque - ude_comp;
 
-        BSP::Motor::DM::Motor4310.ctrl_Mit(2, 0, -tar_yaw_vel.x1 * 0.0174532f, 0, yaw_vel_ff_kd, final_torque);
+        BSP::Motor::DM::Motor4310.ctrl_Mit(2, 0, 0, 0, 0, -Adrc_yaw_vel.getU());
         
-        Tools.vofaSend(tar_yaw_vel.x1, cur_yaw_vel, BSP::Motor::DM::Motor4310.getAngleDeg(2), 
-                final_torque, friction_torque, 0);
+        // Tools.vofaSend(tar_yaw_vel.x1, cur_yaw_vel, BSP::Motor::DM::Motor4310.getAngleDeg(2), 
+        //         final_torque, friction_torque, 0);
     }
     else if(Now_Status_Serial == GIMBAL::DISABLE)
     {
         // 失能模式
         BSP::Motor::DM::Motor4310.ctrl_Mit(2, 0, 0, 0, 0, 0);
     }
-    // Tools.vofaSend(Communicat::vision.rx_target.yaw_angle, filter_tar_yaw_pos, 
-    //                 BSP::Motor::DM::Motor4310.getAngleDeg(2), 
-    //                 filter_tar_yaw_pos - BSP::Motor::DM::Motor4310.getAngleDeg(2), Communicat::vision.getTarYaw(), 0);
 
 }
 
@@ -276,10 +277,15 @@ void Gimbal::pitchControl()
         // VOFA+ 调试信号: 目标速度, 反馈速度, ADRC输出, 阻力前馈, 重力前馈, 总力矩
         // Tools.vofaSend(tar_pitch_vel.x1, cur_pitch_vel, Adrc_pitch_vel.getU(), friction_torque, gravity_feedforward, final_torque);
     }
+    Tools.vofaSend(Communicat::vision.rx_target.yaw_angle, filter_tar_yaw_pos, 
+                    BSP::Motor::DM::Motor4310.getAngleDeg(2), 
+                    filter_tar_yaw_pos - BSP::Motor::DM::Motor4310.getAngleDeg(2),
+                    
+                    Communicat::vision.rx_target.pitch_angle, filter_tar_pitch,
+                    BSP::Motor::DM::Motor4310.getAngleDeg(1),
+                    filter_tar_yaw_pos - BSP::Motor::DM::Motor4310.getAngleDeg(2),
+                    0, 0);
 
-    Tools.vofaSend(Communicat::vision.getVisionPitch(), filter_tar_pitch,
-                BSP::Motor::DM::Motor4310.getAngleDeg(1),
-                filter_tar_pitch - BSP::Motor::DM::Motor4310.getAngleDeg(1), Communicat::vision.getTarPitch(), BSP::IMU::imu.getPitch());
 }
 
 void Gimbal::sendCan()

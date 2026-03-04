@@ -21,7 +21,7 @@ class Gimbal_to_Chassis
 
     uint8_t head = 0xA5; // 帧头
     uint8_t len;
-    int16_t Init_Angle = -73;
+    int16_t Init_Angle = 5;
     int16_t target_offset_angle = 0;
 
     // 接收帧头定义
@@ -136,8 +136,10 @@ class Vision
 
     struct Tx_Gimbal
     {
-        int32_t pitch_angle;
-        int32_t yaw_angle;
+        float quat_w;
+        float quat_x;
+        float quat_y;
+        float quat_z;
         uint32_t time;
     };
 
@@ -184,7 +186,7 @@ class Vision
     Rx_Target rx_target;
     Rx_Other rx_other;
 
-    uint8_t Tx_pData[18];
+    uint8_t Tx_pData[26];
 
 
     bool fire_flag;

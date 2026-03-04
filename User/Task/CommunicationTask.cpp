@@ -72,11 +72,24 @@ void Gimbal_to_Chassis::Data_send()
     auto *remote = Mode::RemoteModeManager::Instance().getActiveController();
     auto channel_to_uint8 = [](float value) { return (static_cast<uint8_t>(value * 110) + 110); };
 
+    float target_lx = 0.0f;
+    float target_ly = 0.0f;
+
     // 初始化结构体数据
     if (remote->isKeyboardMode() == true)
     {
-        direction.LX = channel_to_uint8(-direction.LX);
-        direction.LY = channel_to_uint8(-direction.LY);
+        auto key = BSP::Remote::dr16.keyBoard();
+        if (key.w) target_ly += 1.0f;
+        if (key.s) target_ly -= 1.0f;
+        if (key.a) target_lx -= 1.0f;
+        if (key.d) target_lx += 1.0f;
+
+        // Limiting diagonal speed if necessary, or just keeping independent axes
+        // Optional: specific logic for coordinate system inversion if needed
+        // target_lx = -target_lx; // Uncomment if left/right is inverted
+        
+        direction.LX = channel_to_uint8(target_lx);
+        direction.LY = channel_to_uint8(target_ly);
     }
     else
     {
@@ -85,6 +98,11 @@ void Gimbal_to_Chassis::Data_send()
     }
 
     direction.Yaw_encoder_angle_err = CalcuGimbalToChassisAngle();
+
+    if (remote->isKeyboardMode() && fabs(direction.Yaw_encoder_angle_err) < 1.0f)
+    {
+        direction.Yaw_encoder_angle_err = 0.f;
+    }
 
     chassis_mode.Universal_mode = remote->isUniversalMode();
     chassis_mode.Follow_mode = remote->isFollowMode();
@@ -96,6 +114,45 @@ void Gimbal_to_Chassis::Data_send()
 
     if (chassis_mode.Rotating_mode)
         direction.Rotating_vel = channel_to_uint8(BSP::Remote::dr16.sw());
+
+    // Keyboard rotating mode: X long press to enable, release to disable
+    static bool is_rotating_enabled = false;
+    static bool last_x_state = false;
+    static uint32_t x_press_tick = 0;
+    
+    if (remote->isKeyboardMode())
+    {
+        auto key = BSP::Remote::dr16.keyBoard();
+        bool current_x_state = key.x;
+        if (current_x_state && !last_x_state)
+        {
+            x_press_tick = HAL_GetTick();
+        }
+        else if (!current_x_state)
+        {
+            is_rotating_enabled = false;
+            x_press_tick = 0;
+        }
+
+        if (current_x_state && x_press_tick != 0 && (HAL_GetTick() - x_press_tick >= 500))
+        {
+            is_rotating_enabled = true;
+        }
+        last_x_state = current_x_state;
+
+        if (is_rotating_enabled)
+        {
+            chassis_mode.Rotating_mode = 1;
+            direction.Rotating_vel = channel_to_uint8(1.0f); // Set a default rotation speed, e.g., max speed
+        }
+    }
+    else
+    {
+        // Reset state if not in keyboard mode to prevent sticking
+        is_rotating_enabled = false;
+        last_x_state = false;
+        x_press_tick = 0;
+    }
 
     auto key = BSP::Remote::dr16.keyBoard();
     ui_list.UI_F5 = key.ctrl;
@@ -198,8 +255,10 @@ void Vision::Data_send()
     frame.head_one = 0x39;
     frame.head_two = 0x39;
 
-    tx_gimbal.yaw_angle = BSP::IMU::imu.getAddYaw() * 100;
-    tx_gimbal.pitch_angle = BSP::IMU::imu.getPitch() * 100;
+    tx_gimbal.quat_w = BSP::IMU::imu.getQuat_w();
+    tx_gimbal.quat_x = BSP::IMU::imu.getQuat_x();
+    tx_gimbal.quat_y = BSP::IMU::imu.getQuat_y();
+    tx_gimbal.quat_z = BSP::IMU::imu.getQuat_z();
 
     tx_other.bullet_rate = 26;
     tx_other.enemy_color = 0x52; // 0x42我红   0X52我蓝
@@ -209,20 +268,15 @@ void Vision::Data_send()
     Tx_pData[0] = frame.head_one;
     Tx_pData[1] = frame.head_two;
 
-    Tx_pData[2] = (int32_t)tx_gimbal.pitch_angle >> 24;
-    Tx_pData[3] = (int32_t)tx_gimbal.pitch_angle >> 16;
-    Tx_pData[4] = (int32_t)tx_gimbal.pitch_angle >> 8;
-    Tx_pData[5] = (int32_t)tx_gimbal.pitch_angle;
+    std::memcpy(&Tx_pData[2], &tx_gimbal.quat_w, sizeof(float));
+    std::memcpy(&Tx_pData[6], &tx_gimbal.quat_x, sizeof(float));
+    std::memcpy(&Tx_pData[10], &tx_gimbal.quat_y, sizeof(float));
+    std::memcpy(&Tx_pData[14], &tx_gimbal.quat_z, sizeof(float));
 
-    Tx_pData[6] = (int32_t)tx_gimbal.yaw_angle >> 24;
-    Tx_pData[7] = (int32_t)tx_gimbal.yaw_angle >> 16;
-    Tx_pData[8] = (int32_t)tx_gimbal.yaw_angle >> 8;
-    Tx_pData[9] = (int32_t)tx_gimbal.yaw_angle;
-
-    Tx_pData[10] = 26;
-    Tx_pData[11] = 0x52; // 0x42红   0X52蓝色
-    Tx_pData[12] = tx_other.vision_mode;
-    Tx_pData[13] = tx_other.tail;
+    Tx_pData[18] = tx_other.bullet_rate;
+    Tx_pData[19] = tx_other.enemy_color; // 0x42红   0X52蓝色
+    Tx_pData[20] = tx_other.vision_mode;
+    Tx_pData[21] = tx_other.tail;
 
     send_time++;
     tx_gimbal.time = send_time;
@@ -230,12 +284,12 @@ void Vision::Data_send()
 
     demo_time = tx_gimbal.time - rx_target.time;
 
-    Tx_pData[14] = (int32_t)tx_gimbal.time >> 24;
-    Tx_pData[15] = (int32_t)tx_gimbal.time >> 16;
-    Tx_pData[16] = (int32_t)tx_gimbal.time >> 8;
-    Tx_pData[17] = (int32_t)tx_gimbal.time;
+    Tx_pData[22] = (int32_t)tx_gimbal.time >> 24;
+    Tx_pData[23] = (int32_t)tx_gimbal.time >> 16;
+    Tx_pData[24] = (int32_t)tx_gimbal.time >> 8;
+    Tx_pData[25] = (int32_t)tx_gimbal.time;
 
-    CDC_Transmit_FS(Tx_pData, 18);
+    CDC_Transmit_FS(Tx_pData, 26);
 }
 
 void Vision::dataReceive()
@@ -272,10 +326,10 @@ void Vision::dataReceive()
         //		else
         //			vision_flag = true;
 
-        yaw_angle_ = rx_target.yaw_angle - BSP::Motor::DM::Motor4310.getAngleDeg(2);
+        yaw_angle_ = rx_target.yaw_angle + BSP::Motor::DM::Motor4310.getAngleDeg(2);
         pitch_angle_ = rx_target.pitch_angle + BSP::Motor::DM::Motor4310.getAngleDeg(1);
         //pitch_angle_ *= -1.0; // 每台方向不同
-        yaw_angle_ *= -1.0;
+        //yaw_angle_ *= -1.0;
 
         rx_other.fire = (Rx_pData[11]);
         rx_other.tail = Rx_pData[12];

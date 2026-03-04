@@ -2,6 +2,7 @@
 
 #include "../../Algorithm/FSM/alg_fsm.hpp"
 #include "../../BSP/SimpleKey/SimpleKey.hpp"
+#include "../../Task/CommunicationTask.hpp"
 #include <cstdint>
 
 namespace HeatControl {
@@ -129,7 +130,7 @@ private:
     float currentFire = 20.0f;  ///< 当前允许发射频率 (Hz)
     
     // ==================== 热量阈值 ====================
-    float heatLimitSnubber = 80.0f;  ///< 热量缓冲区（开始降频的阈值）
+    float heatLimitSnubber = 40.0f;  ///< 热量缓冲区（开始降频的阈值）
     float heatLimitStop = 20.0f;     ///< 停止发射阈值（剩余热量）
     static constexpr float CUR_VEL_THRESHOLD = 5900.0f;  ///< 摩擦轮速度差阈值
     

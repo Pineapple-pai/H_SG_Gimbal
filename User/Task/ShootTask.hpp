@@ -212,6 +212,12 @@ class Class_ShootFSM : public Class_FSM
     // Kpid_t Kpid_Friction_R_vel;
     PID pid_Motor_Friction_R_vel;
 
+    // 单发逻辑变量
+    uint32_t trigger_start_tick = 0;       // 扳机按下开始时间
+    bool last_trigger_state = false;       // 上一次扳机状态
+    bool is_long_press_auto = false;       // 是否进入长按连发模式
+    uint32_t fire_confirm_count = 0;       // 用于击发确认的计数快照
+
 
 
     // 用于单发检测，获取上升沿判断是否击发子弹

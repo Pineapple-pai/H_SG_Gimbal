@@ -41,6 +41,7 @@ int8_t shift;
 void keyBoradUpdata()
 {
     using namespace APP::Key;
+    auto *remote = Mode::RemoteModeManager::Instance().getActiveController();
 
     // 底盘方向按键
     auto W = KeyBroad::Instance().getPress(KeyBroad::KEY_W);
@@ -49,26 +50,24 @@ void keyBoradUpdata()
     auto D = KeyBroad::Instance().getPress(KeyBroad::KEY_D);
 
     // 小陀螺切换
-    auto Q = KeyBroad::Instance().getKeyToggle(KeyBroad::KEY_Q);
-    auto E = KeyBroad::Instance().getKeyToggle(KeyBroad::KEY_E);
+    auto X_Press = KeyBroad::Instance().getPress(KeyBroad::KEY_X);
+    auto X_LongPress = KeyBroad::Instance().getKeyLongPress(KeyBroad::KEY_X);
     // 按住shift
     auto SHIFT = KeyBroad::Instance().getPress(KeyBroad::KEY_SHIFT);
     // shift = KeyBroad::Instance().getPress(KeyBroad::KEY_SHIFT);
     shift = SHIFT;
     // 下降沿加减功率
-    auto F = KeyBroad::Instance().getFallingEdge(KeyBroad::KEY_F);
-    auto G = KeyBroad::Instance().getFallingEdge(KeyBroad::KEY_G);
+    auto V = KeyBroad::Instance().getFallingEdge(KeyBroad::KEY_V);
+    auto B = KeyBroad::Instance().getFallingEdge(KeyBroad::KEY_B);
 
     // 点击刷新
     auto CTRL = KeyBroad::Instance().getKeyClick(KeyBroad::KEY_CTRL);
 
     // 点击切换视觉模式
-    auto Vision = KeyBroad::Instance().getKeyClick(KeyBroad::KEY_C);
 
     // 一键掉头
-    auto X = KeyBroad::Instance().getKeyClick(KeyBroad::KEY_X);
+    auto C_TurnAround = KeyBroad::Instance().getKeyClick(KeyBroad::KEY_C);
 
-    auto C = KeyBroad::Instance().getKeyClick(KeyBroad::KEY_C);
 
     //   前进后退
     if (W)
@@ -87,24 +86,22 @@ void keyBoradUpdata()
         Gimbal_to_Chassis_Data.set_LX(0);
 
     // 小陀螺
-    if (Q)
+    if (X_Press && X_LongPress)
         Gimbal_to_Chassis_Data.set_Rotating_vel(220);
-    else if (E)
+    else
         Gimbal_to_Chassis_Data.set_Rotating_vel(0);
 
     // 按住就是shift不是长按，不需要if
     Gimbal_to_Chassis_Data.set_Shift(SHIFT);
 
     // 增加功率
-    if (F)
+    if (V)
         Gimbal_to_Chassis_Data.setPower(10);
 
     // 减功率
-    if (G)
+    if (B)
         Gimbal_to_Chassis_Data.setPower(-10);
 
-    if (C)
-        Gimbal_to_Chassis_Data.setFly(100);
 
     // 刷新
     if (CTRL)
@@ -113,17 +110,19 @@ void keyBoradUpdata()
         Gimbal_to_Chassis_Data.setFly(0);
     }
 
-    if (X)
+    if (C_TurnAround)
     {
         TASK::GIMBAL::gimbal.setTrueAround();
     }
 
     static uint8_t vision_mode = 1;
-    if (Vision)
+
+    if (remote->isRuneMode())
     {
-        vision_mode++;
+        vision_mode = 2;
     }
-    else if (vision_mode > 3)
+
+    if (vision_mode > 3)
     {
         vision_mode = 1;
     }
@@ -138,24 +137,39 @@ void BoosterUpState()
     auto *remote = Mode::RemoteModeManager::Instance().getActiveController();
 
     // 点击开启发射机构
-    auto V = KeyBroad::Instance().getKeyClick(KeyBroad::KEY_V);
-    auto B = KeyBroad::Instance().getKeyClick(KeyBroad::KEY_B);
+    auto R = KeyBroad::Instance().getKeyClick(KeyBroad::KEY_R);
+    auto G = KeyBroad::Instance().getKeyClick(KeyBroad::KEY_G);
 
     static bool booster_enabled = false;
 
     // 按V键开启，按B键关闭
-    if (V || remote->isLaunchMode())
-        booster_enabled = true;
-    if (B || remote->isStopMode())
-        booster_enabled = false;
+    // 按V键开启，按B键关闭
+    if (remote->isKeyboardMode())
+    {
+        if (R)
+            booster_enabled = true;
+        if (G)
+            booster_enabled = false;
+    }
+    else
+    {
+        // 遥控器模式：根据开关状态判断是否启用发射机构
+        booster_enabled = remote->isLaunchMode();
+    }
 
     // 如果未启用或处于停止模式，则禁用
     if (!booster_enabled || remote->isStopMode())
     {
         TASK::Shoot::shoot_fsm.setNowStatus(TASK::Shoot::Booster_Status::DISABLE);
     }
+    else if (remote->isRuneMode())
+    {
+        // 左中右上（符节模式）：进入AUTO模式自动发弹
+        TASK::Shoot::shoot_fsm.setNowStatus(TASK::Shoot::Booster_Status::AUTO);
+    }
     else if (remote->isVisionFireMode())
     {
+        // 键鼠模式下的视觉开火（右键+左键）
         TASK::Shoot::shoot_fsm.setNowStatus(TASK::Shoot::Booster_Status::ONLY);
     }
     else if (remote->isLaunchMode())

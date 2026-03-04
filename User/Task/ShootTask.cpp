@@ -16,8 +16,8 @@ uint8_t firenum;
 uint32_t fireMS;
 float tar_angle = 0.0f;
 uint32_t Send_ms = 0;
-int16_t debug_limit = 100;
-int16_t debug_cooling = 10;
+int16_t debug_limit = 200;
+int16_t debug_cooling = 40;
 void ShootTask(void *argument)
 {
     for (;;)
@@ -41,7 +41,7 @@ void ShootTask(void *argument)
 
         TASK::Shoot::shoot_fsm.Control();
 
-        osDelay(5); 
+        osDelay(2); // 500Hz
     }
 }
 
@@ -204,7 +204,7 @@ void Class_JammingFSM::UpState()
 
         break;
     }
-    }
+    }   
 }
 
 void Class_ShootFSM::UpState()
@@ -212,18 +212,17 @@ void Class_ShootFSM::UpState()
     switch (Now_Status_Serial)
     {
     case (Booster_Status::DISABLE): {
-        // 如何失能状态，拨盘力矩为0，摩擦轮期望值为0
-        // 使用ADRC控制摩擦轮
+        // 失能状态，拨盘力矩为0，摩擦轮期望值为0
         Adrc_Friction_L.setTarget(0.0f);
         Adrc_Friction_R.setTarget(0.0f);
 
-		float current_angle = BSP::Motor::Dji::Motor2006.getAddAngleDeg(1);
-
+        float current_angle = BSP::Motor::Dji::Motor2006.getAddAngleDeg(1);
         adrc_Dail_vel.setTarget(current_angle);
         break;
     }
     case (Booster_Status::ONLY): {
-        // 使用ADRC控制摩擦轮速度
+        // 单发模式：具备智能长按切换连发功能
+        // 设置摩擦轮速度
         Adrc_Friction_L.setTarget(-target_friction_omega);
         Adrc_Friction_R.setTarget(target_friction_omega);
 
@@ -232,93 +231,85 @@ void Class_ShootFSM::UpState()
 
         // 获取当前角度
         float current_angle = BSP::Motor::Dji::Motor2006.getAddAngleDeg(1);
-        
-        // 获取遥控器
+
+        // 1. 获取扳机状态（遥控器鼠标左键 或 视觉自动开火标志）
+        // 注意：fire_flag 来自视觉自动瞄准设置，但也可能是手动触发（如果上层逻辑合并了）
+        // 此处我们需要原始的“按压”信号来做长按检测
         auto *remote = Mode::RemoteModeManager::Instance().getActiveController();
+        bool is_trigger_pressed = (remote->getMouseKeyLeft() == true) || (fire_flag == 1);
 
-        // 获取SW开关值
-        sw_val = remote->getSw();
-        static float last_sw_val = 0; // 定义在外面，确保跨分支记录
-
-        if (sw_val < 0)
+        // 2. 上升沿检测 (按下瞬间)
+        if (is_trigger_pressed && !last_trigger_state)
         {
-            // === 单发模式逻辑 (sw < 0.5) ===
-            // 检测下降沿：上次>=0 且 本次<0
-            bool sw_triggered = (last_sw_val >= 0);
+            // 记录开始时间
+            trigger_start_tick = HAL_GetTick();
+            // 重置长按标志
+            is_long_press_auto = false;
+            // 记录当前已发弹数（从热量控制获取），用于击发确认
+            fire_confirm_count = Heat_Limit.getFireCount();
 
-            bool allow_fire = true; 
-            allow_fire = 10;
-            //Heat_Limit.getCurrentFireRate() > 0.0f;
-
-            bool is_active_input = false;
-            
-            if (remote->isKeyboardMode())
+            // 立即执行一次单发动作 (转动40度)
+            // 检查热量限制允许开火
+            if (Heat_Limit.getCurrentFireRate() > 0.0f)
             {
-                // 键鼠模式：触发源 = 鼠标左键
-                is_active_input = remote->getMouseKeyLeft(); 
-                // 仅键鼠模式使用 ClickFSM
-                ClickFSM.UpState(is_active_input);
-                if (ClickFSM.isClick() && allow_fire)
-                {
-                    StopFireFSM.Activate();
-                    Dail_target_pos -= 40.0f;
-                }
+                Dail_target_pos -= 40.0f; // 严格单发角度
             }
-            else
+        }
+
+        // 3. 长按检测 (持续按住)
+        if (is_trigger_pressed)
+        {
+            // 计算按住时长
+            if (HAL_GetTick() - trigger_start_tick > 1000) // 1秒阈值
             {
-                 // 遥控器模式：直接使用 SW 切换沿触发
-                 if (sw_triggered && allow_fire)
-                 {
-                     StopFireFSM.Activate();
-                     Dail_target_pos -= 40.0f;
-                 }
+                is_long_press_auto = true;
             }
 
-            // 更新停火状态机
-            float current_torque = BSP::Motor::Dji::Motor2006.getTorque(1);
-            StopFireFSM.UpState(current_torque, 0);
-
-            if (StopFireFSM.isProcessing())
+            // 如果进入长按连发模式
+            if (is_long_press_auto)
             {
-                Dail_target_pos = current_angle;
+                // 使用默认连发频率 (例如 15Hz 或根据配置)
+                float auto_fire_hz = 15.0f; 
+                
+                // 热量限制
+                auto_fire_hz = Tools.clamp(auto_fire_hz, Heat_Limit.getCurrentFireRate(), 0.0f);
+                
+                // 持续更新位置 (连发)
+                float angle_per_frame = hz_to_angle(auto_fire_hz);
+                Dail_target_pos -= angle_per_frame;
             }
         }
         else
         {
-            // === 连发模式逻辑 (sw >= 0.5) ===
-            target_fire_hz = sw_val * 25.0f; 
-
-            if (remote->isKeyboardMode())
-            {
-                target_fire_hz = remote->getMouseKeyLeft() * 20.0f;
-            }
-
-            // 2. 应用热量限制
-            // 修复：参数顺序 (val, min, max) -> (val, 0, max)
-            target_fire_hz = Tools.clamp(target_fire_hz, 10.0f, 0.0f);
-
-            // 3. 计算角度步长
-            float angle_per_frame = hz_to_angle(target_fire_hz);
-
-            // 4. 更新目标位置
-            Dail_target_pos -= angle_per_frame;
-            
-            // 重要：在切回连发时，重置
-            StopFireFSM.Reset();
+            // 松开扳机，重置状态
+            is_long_press_auto = false;
         }
 
-        last_sw_val = sw_val;
+        // 更新历史状态
+        last_trigger_state = is_trigger_pressed;
+        
         break;
     }
     case (Booster_Status::AUTO): {
-        // 连发模式，使用ADRC控制摩擦轮
+        // 连发模式
         Adrc_Friction_L.setTarget(-target_friction_omega);
         Adrc_Friction_R.setTarget(target_friction_omega);
 
         auto *remote = Mode::RemoteModeManager::Instance().getActiveController();
 
         // 获取目标发射频率（Hz）
-        target_fire_hz = remote->getSw() * 25.0f; // 最大20Hz
+        target_fire_hz = remote->getSw() * 25.0f; // 最大25Hz（默认波轮控制）
+
+        // 左下右上模式：手动波轮打弹 + 视觉开火位自动打弹
+        if ((BSP::Remote::dr16.switchLeft() == BSP::Remote::Dr16::Switch::DOWN) && 
+            (BSP::Remote::dr16.switchRight() == BSP::Remote::Dr16::Switch::UP))
+        {
+            // 收到视觉开火位时，使用25Hz自动发射
+            if (fire_flag)
+            {
+                target_fire_hz = 25.0f;
+            }
+        }
 
         if (remote->isKeyboardMode())
         {
@@ -328,8 +319,7 @@ void Class_ShootFSM::UpState()
         // 热量限制
         HeatLimit();
 
-        // 应用热量限制
-        target_fire_hz = Tools.clamp(target_fire_hz, 10.0f, 0.0f);
+        target_fire_hz = Tools.clamp(target_fire_hz, Heat_Limit.getCurrentFireRate(), 0.0f);
 
         // 获取当前角度
         float current_angle = BSP::Motor::Dji::Motor2006.getAddAngleDeg(1);
@@ -386,13 +376,13 @@ void Class_ShootFSM::HeatLimit()
     auto velR = BSP::Motor::Dji::Motor3508.getVelocityRpm(2);
 
 	//如果发0则为断连
-	// if(Gimbal_to_Chassis_Data.getBoosterHeatLimit() != 0)
-	// {
-	// 	Heat_Limit.setBoosterHeatParams(Gimbal_to_Chassis_Data.getBoosterHeatLimit(), Gimbal_to_Chassis_Data.getBoosterHeatCd());
-	// }
+	if(Gimbal_to_Chassis_Data.getBoosterHeatLimit() != 0)
+	{
+		Heat_Limit.setBoosterHeatParams(Gimbal_to_Chassis_Data.getBoosterHeatLimit(), Gimbal_to_Chassis_Data.getBoosterHeatCd());
+	}
     
     // 使用调试参数进行测试
-    Heat_Limit.setBoosterHeatParams(debug_limit, debug_cooling);
+    //Heat_Limit.setBoosterHeatParams(debug_limit, debug_cooling);
 
     Heat_Limit.setFrictionCurrent(CurL, CurR);
     Heat_Limit.setFrictionVelocity(velL, velR);
@@ -437,7 +427,7 @@ float Class_ShootFSM::hz_to_angle(float fire_hz)
 {
     const int slots_per_rotation = 9;                         // 拨盘每转一圈的槽位数
     const float angle_per_slot = 360.0f / slots_per_rotation; // 每个槽位对应的角度
-    const float control_period = 0.005f;                      // 控制周期5ms (与osDelay(5)匹配)
+    const float control_period = 0.002f;                      // 控制周期2ms (与osDelay(2)匹配)
 
     // 计算每帧需要转动的角度
     // (目标频率 * 每发角度) / 控制周期

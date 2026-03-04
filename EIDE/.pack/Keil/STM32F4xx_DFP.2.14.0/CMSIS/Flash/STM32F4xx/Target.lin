@@ -1,4 +1,4 @@
-; Linker Control File (scatter-loading)
+tar_yaw.x1 和 tar_yaw_vel.x1 都来自摇杆; Linker Control File (scatter-loading)
 ;
 
 PRG 0 PI               ; Programming Functions
