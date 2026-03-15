@@ -10,60 +10,61 @@
 
 #include "../APP/Mod/RemoteModeManager.hpp"
 #include "../BSP/DWT/DWT.hpp"
-
+#include "../APP/Heat_Detector/Heat_Control.hpp"
+#include "../Task/ShootTask.hpp"
 #include "can.h"
 #include "cmsis_os2.h"
-// ============ 云台控制参数 ============
-// Pitch轴MIT控制参数
+#include "../math.h"
+// ===== 云台控制参数 =====
+// Pitch 轴 MIT 参数
 float pitch_Kp = 0.0f;
 float pitch_Kd = 0.0f;
-
 float pitch_vel_scale = 2.5f;
 float fliter_pitch_vel = 0.0f;
 
-float pitch_friction_comp = 0.20f; // 阻力补偿前馈
-float pitch_vel_ff_kd = 0.0f;     // 角速度前馈增益
-
-// Pitch轴状态变量
+// Pitch 轴状态变量
 float filter_tar_pitch = 0.0f;
-float target_tar_pitch = -120.0f;
 
-// Yaw轴速度控制变量
-float yaw_vel_scale = 3.0f;
-float fliter_tar_yaw = 0.0f;
+// Yaw 轴速度控制变量
+float yaw_vel_scale = 4.0f;
+float yaw_friction_comp = 0.8f;
 
-float yaw_friction_comp = 0.0f;
-float yaw_vel_ff_kd = 0.0f;
-
-// Yaw轴MIT控制参数
+// Yaw 轴 MIT 参数
 float yaw_kp = 0.0f;
 float yaw_kd = 0.0f;
-float yaw_vel_kd = 1.5f;
-// 初始化相关
+
+// 云台初始化标志与初始角
 static bool gimbal_initialized = false;
 static constexpr float YAW_INIT_ANGLE = 88.0f;
+static constexpr float DEG_TO_RAD = 0.0174532f;
 
-// 重力补偿系数（需要根据实际调试）
-float gravity_comp = 1.35f;
+// Pitch 重力补偿
+float gravity_comp = 1.25f;
 float gravity_feedforward = 0.0f;
 
-float zero_yaw = 0.0f;
 void GimbalTask(void *argument)
 {
     osDelay(500);
-    
+
     static bool motor_enabled = false;
-    static uint32_t last_enable_tick = 0;
+    int8_t enabled = 0;
     for (;;)
     {
-         if (!motor_enabled)
-         {
-            BSP::Motor::DM::Motor4310.On(1, BSP::Motor::DM::MIT);
-            osDelay(5);  // 增加延时，确保指令发送成功
-            BSP::Motor::DM::Motor4310.On(2, BSP::Motor::DM::MIT);
-            osDelay(5);
-            motor_enabled = true;
-         }
+        enabled ++;
+        // if (!motor_enabled)
+        // {
+            if(enabled == 1)
+            {
+                BSP::Motor::DM::Motor4310.On(1, BSP::Motor::DM::MIT);
+            }
+            else if(enabled == 2)
+            {   
+                BSP::Motor::DM::Motor4310.On(2, BSP::Motor::DM::MIT);
+            }
+
+        //     motor_enabled = true;
+        // }
+
         TASK::GIMBAL::gimbal.upDate();
         osDelay(4);
     }
@@ -71,242 +72,239 @@ void GimbalTask(void *argument)
 
 namespace TASK::GIMBAL
 {
-// 构造函数定义，使用初始化列表
-Gimbal::Gimbal()
-    //: //adrc_yaw_vel(Alg::LADRC::TDquadratic(100, 0.005), 8, 40, 0.1, 0.005, 16384),
-      // 速度pid的积分
-      //pid_yaw_angle{0, 0}
-      // pid的k值
-      //kpid_yaw_angle{8, 0, 0}
-{
-    // 其他初始化逻辑（如果有）
-}
 
-void Gimbal::upDate()
-{
-    UpState();
-    yawControl();
-
-    pitchControl();
-
-    sendCan();
-}
-
-void Gimbal::UpState()
-{
-    Status[Now_Status_Serial].Count_Time++; // 计时
-
-    using namespace APP::Data;
-
-    auto *remote = Mode::RemoteModeManager::Instance().getActiveController();
-
-    auto remote_rx = remote->getRightX();
-    auto remote_ry = remote->getRightY();
-
-    // 获取当前角度值
-    auto cur_angle = BSP::IMU::imu.getAddYaw();
-
-    // 静态变量：记录上一次的模式，用于检测模式切换
-    static int last_mode = GIMBAL::DISABLE;
-    
-    switch (Now_Status_Serial)
+    // 构造函数
+    Gimbal::Gimbal()
     {
-    case (GIMBAL::DISABLE): {
+        // 当前无需额外初始化
+    }
 
-        // 如果失能则让期望值等于实际值
-        filter_tar_yaw_pos = BSP::IMU::imu.getAddYaw();
-        filter_tar_yaw_vel = 0;  // 速度期望归零
-        fliter_pitch_vel = 0;           // pitch速度期望归零
+    void Gimbal::upDate()
+    {
+        UpState();
+        yawControl();
+        pitchControl();
+        sendCan();
+    }
 
-        filter_tar_pitch = BSP::Motor::DM::Motor4310.getAddAngleDeg(1);
-        fliter_tar_yaw = BSP::Motor::DM::Motor4310.getAddAngleDeg(2);
+    void Gimbal::UpState()
+    {
+        Status[Now_Status_Serial].Count_Time++;
 
-        if (!gimbal_initialized)
+        using namespace APP::Data;
+
+        auto *remote = Mode::RemoteModeManager::Instance().getActiveController();
+
+        auto remote_rx = remote->getRightX();
+        auto remote_ry = remote->getRightY();
+
+        switch (Now_Status_Serial)
         {
-            fliter_tar_yaw = YAW_INIT_ANGLE;
-            filter_tar_yaw_pos = YAW_INIT_ANGLE;
-            gimbal_initialized = true;
-        }
-        else
+        case (GIMBAL::DISABLE):
         {
-            fliter_tar_yaw = BSP::Motor::DM::Motor4310.getAddAngleDeg(2);
-        }
-
-        break;
-    }
-    case (GIMBAL::VISION): {
-        // 视觉模式
-        
-        // 直接使用视觉位置控制，移除是否有目标的判断
-        filter_tar_yaw_pos = Communicat::vision.getTarYaw();
-        filter_tar_pitch = Communicat::vision.getTarPitch();
-        
-        break;
-    }
-    case (GIMBAL::KEYBOARD): {
-        // 键鼠模式
-        filter_tar_yaw_vel = remote->getMouseVelX() * 500;
-        fliter_pitch_vel = remote->getMouseVelY() * 500;
-        // pitch_vel = -remote_ry * pitch_vel_scale;
-	    // filter_tar_yaw_vel = remote_rx * yaw_vel_scale;
-        // 一键掉头
-        TurnAround();
-        break;
-    }
-    case (GIMBAL::NORMAL): {
-        filter_tar_yaw_vel = remote_rx * yaw_vel_scale;
-
-        filter_tar_pitch += remote_ry * 0.5f;
-        fliter_pitch_vel = -remote_ry * pitch_vel_scale;
-        filter_tar_yaw_pos += filter_tar_yaw_vel * 0.004f;
-        break;
-    }
-    }
-    
-    // 在函数末尾更新 last_mode，确保能正确检测模式切换
-    last_mode = Now_Status_Serial;
-
-    // if (is_sin == 0)
-    // {
-    //     gimbal_data.setTarYaw(tar_yaw.x1);
-    // }
-    // else if (is_sin == 1)
-    // {
-    //     sin_val = sinf(2 * 3.1415926f * HAL_GetTick() / 500.0f * sin_hz) * b;
-
-    //     filter_tar_yaw_pos = sin_val;
-    // }
-
-    // pitch轴限幅
-    filter_tar_pitch = Tools.clamp(filter_tar_pitch, -92.0f, -148.0f);
-    target_tar_pitch = Tools.clamp(target_tar_pitch, -92.0f, -148.0f);
-
-    // 期望值滤波
-    tar_yaw.Calc(filter_tar_yaw_pos);
-    tar_pitch.Calc(filter_tar_pitch);
-
-    tar_yaw_vel.Calc(filter_tar_yaw_vel);
-    tar_pitch_vel.Calc(fliter_pitch_vel);
-
-
-    // 设置云台期望值
-    gimbal_data.setTarYaw(tar_yaw.x1);
-    gimbal_data.setTarPitch(tar_pitch.x1);
-}
-
-void Gimbal::yawControl()
-{
-    using namespace APP::Data;
-    auto *remote = Mode::RemoteModeManager::Instance().getActiveController();
-
-    // 陀螺仪反馈
-    auto cur_yaw_vel = BSP::IMU::imu.getGyroZ() * 0.0174532f;
-
-    // 根据模式选择控制策略
-    if (Now_Status_Serial == GIMBAL::VISION)
-    {
-        BSP::Motor::DM::Motor4310.ctrl_Mit(2, (filter_tar_yaw_pos) * 0.0174532f, 0, yaw_kp, yaw_kd, 0);
-    }
-    else if(Now_Status_Serial == GIMBAL::NORMAL || Now_Status_Serial == GIMBAL::KEYBOARD)
-    {
-        // 小陀螺/键鼠模式：陀螺仪反馈 + ADRC速度环
-        Adrc_yaw_vel.setTarget(tar_yaw_vel.x1);
-        Adrc_yaw_vel.UpData(cur_yaw_vel);
-
-        // 阻力补偿前馈 (带线性过渡区)
-        float friction_torque = 0.0f;
-        float deadband = 1.0f;
-
-        if (fabs(tar_yaw_vel.x1) < deadband)
-        {
-            friction_torque = (tar_yaw_vel.x1 / deadband) * yaw_friction_comp;
-        }
-        else
-        {
-            friction_torque = (tar_yaw_vel.x1 > 0 ? 1 : -1) * yaw_friction_comp;
-        }
-        float base_torque = -Adrc_yaw_vel.getU() + friction_torque;
-        float cur_yaw_rpm = cur_yaw_vel * 30.0f / 3.1415926f;
-        float vel_err = tar_yaw_vel.x1 - cur_yaw_vel;
-        float ude_comp = yaw_ude.UdeCalcDt(cur_yaw_rpm, base_torque, vel_err, 0.004f);
-        float final_torque = base_torque - ude_comp;
-
-        BSP::Motor::DM::Motor4310.ctrl_Mit(2, 0, 0, 0, 0, -Adrc_yaw_vel.getU());
-        
-        // Tools.vofaSend(tar_yaw_vel.x1, cur_yaw_vel, BSP::Motor::DM::Motor4310.getAngleDeg(2), 
-        //         final_torque, friction_torque, 0);
-    }
-    else if(Now_Status_Serial == GIMBAL::DISABLE)
-    {
-        // 失能模式
-        BSP::Motor::DM::Motor4310.ctrl_Mit(2, 0, 0, 0, 0, 0);
-    }
-
-}
-
-
-void Gimbal::pitchControl()
-{
-    using namespace  APP::Data;
-
-    // 陀螺仪反馈
-    auto cur_pitch_angle = BSP::IMU::imu.getPitch();                 // 角度反馈 (deg)
-    auto cur_pitch_vel = BSP::IMU::imu.getGyroX() * 0.0174532f;      // 角速度反馈 (rad/s)
-    gravity_feedforward = gravity_comp * cosf(cur_pitch_angle * 0.0174532f);
-    if (Now_Status_Serial == GIMBAL::DISABLE)
-    {
-        BSP::Motor::DM::Motor4310.ctrl_Mit(1, 0, 0, 0, 0, 0);
-    }
-    else if(Now_Status_Serial == GIMBAL::VISION)
-    {
-        // 视觉模式：使用MIT位置控制
-        BSP::Motor::DM::Motor4310.ctrl_Mit(1, (filter_tar_pitch) * 0.0174532f, 0, pitch_Kp, pitch_Kd, gravity_feedforward);
-    }
-    else if(Now_Status_Serial == GIMBAL::NORMAL || Now_Status_Serial == GIMBAL::KEYBOARD)
-    { 
-        // ADRC速度环控制
-        Adrc_pitch_vel.setTarget(tar_pitch_vel.x1);
-        Adrc_pitch_vel.UpData(cur_pitch_vel);
-
-        
-
-        float final_torque = Adrc_pitch_vel.getU() + gravity_feedforward;
-
-        BSP::Motor::DM::Motor4310.ctrl_Mit(1, 0, 0, 0, 0, final_torque);
-        
-        // VOFA+ 调试信号: 目标速度, 反馈速度, ADRC输出, 阻力前馈, 重力前馈, 总力矩
-        // Tools.vofaSend(tar_pitch_vel.x1, cur_pitch_vel, Adrc_pitch_vel.getU(), friction_torque, gravity_feedforward, final_torque);
-    }
-    Tools.vofaSend(Communicat::vision.rx_target.yaw_angle, filter_tar_yaw_pos, 
-                    BSP::Motor::DM::Motor4310.getAngleDeg(2), 
-                    filter_tar_yaw_pos - BSP::Motor::DM::Motor4310.getAngleDeg(2),
-                    
-                    Communicat::vision.rx_target.pitch_angle, filter_tar_pitch,
-                    BSP::Motor::DM::Motor4310.getAngleDeg(1),
-                    filter_tar_yaw_pos - BSP::Motor::DM::Motor4310.getAngleDeg(2),
-                    0, 0);
-
-}
-
-void Gimbal::sendCan()
-{
-    // 预留CAN发送接口
-}
-
-void Gimbal::TurnAround()
-{
-    if (is_true_around == true)
-    {
-        // 360 deg/s为180度
-        filter_tar_yaw_vel = 360.0f; // 可以根据需要调整速度大小
-
-        // 如果旋转时间超过500ms，重置状态
-        if (HAL_GetTick() - true_around_time > 500)
-        {
-            is_true_around = false;
+            // 失能时保持当前反馈，避免重新使能时目标突跳
+            filter_tar_yaw_pos = BSP::IMU::imu.getAddYaw();
             filter_tar_yaw_vel = 0;
+            fliter_pitch_vel = 0;
+
+            filter_tar_pitch = BSP::Motor::DM::Motor4310.getAddAngleDeg(1);
+
+            if (!gimbal_initialized)
+            {
+                filter_tar_yaw_pos = YAW_INIT_ANGLE;
+                gimbal_initialized = true;
+            }
+
+            break;
+        }
+        case (GIMBAL::VISION):
+        {
+            // 视觉模式：直接使用视觉目标角度
+            filter_tar_yaw_pos = Communicat::vision.getTarYaw();
+            filter_tar_pitch = Communicat::vision.getVisionPitch();
+            filter_tar_yaw_vel = 0.0f;
+            fliter_pitch_vel = 0.0f;
+
+            break;
+        }
+        case (GIMBAL::KEYBOARD):
+        {
+            // 键鼠模式
+            filter_tar_yaw_vel = remote->getMouseVelX() * 1500;
+            fliter_pitch_vel = -remote->getMouseVelY() * 1500;
+            //TurnAround();
+            break;
+        }
+        case (GIMBAL::NORMAL):
+        {
+            filter_tar_yaw_vel = remote_rx * yaw_vel_scale;
+
+            filter_tar_pitch += remote_ry * 0.5f;
+            fliter_pitch_vel = -remote_ry * pitch_vel_scale;
+            filter_tar_yaw_pos += filter_tar_yaw_vel * 0.004f;
+            break;
+        }
+        }
+
+        // Pitch 角度限幅
+        filter_tar_pitch = Tools.clamp(filter_tar_pitch, -92.0f, -148.0f);
+
+        // 目标值滤波
+        tar_yaw.Calc(filter_tar_yaw_pos);
+        tar_pitch.Calc(filter_tar_pitch);
+
+        tar_yaw_vel.Calc(filter_tar_yaw_vel);
+        tar_pitch_vel.Calc(fliter_pitch_vel);
+
+        // 设置云台目标
+        gimbal_data.setTarYaw(tar_yaw.x1);
+        gimbal_data.setTarPitch(tar_pitch.x1);
+    }
+
+    void Gimbal::yawControl()
+    {
+        using namespace APP::Data;
+
+        // 陀螺仪反馈角速度（rad/s）
+        auto cur_yaw_vel = BSP::IMU::imu.getGyroZ() * 0.0174532f;
+        auto vision_yaw_target_deg = Communicat::vision.getTarYaw(); // 视觉目标角度（deg）
+        auto cur_yaw_angle_deg = BSP::IMU::imu.getYaw();
+        if (Now_Status_Serial == GIMBAL::VISION)
+        {
+            yaw_ude.clear();
+            pid_yaw_vel.clearPID();
+
+            auto wrapped_yaw_target_deg =
+                Tools.Zero_crossing_processing(Communicat::vision.getTarYaw(), cur_yaw_angle_deg, 360.0f);
+
+            filter_tar_yaw_pos = wrapped_yaw_target_deg;
+
+            pid_yaw_angle.setTarget(wrapped_yaw_target_deg * DEG_TO_RAD);
+            float target_yaw_vel =
+                pid_yaw_angle.GetPidPos(Kpid_yaw_angle, cur_yaw_angle_deg * DEG_TO_RAD, 3.0f);
+
+            Adrc_yaw_vel.setTarget(target_yaw_vel);
+            Adrc_yaw_vel.UpData(cur_yaw_vel);
+
+            float target_torque = Tools.clamp(-Adrc_yaw_vel.getU(), 3.0f, -3.0f);
+
+            BSP::Motor::DM::Motor4310.ctrl_Mit(2, 0, 0, 0, 0, target_torque);
+  
+        }
+        else if (Now_Status_Serial == GIMBAL::NORMAL || Now_Status_Serial == GIMBAL::KEYBOARD)
+        {
+            // ADRC 速度环
+            Adrc_yaw_vel.setTarget(tar_yaw_vel.x1);
+            Adrc_yaw_vel.UpData(cur_yaw_vel);
+
+            // 摩擦补偿（死区内线性过渡）
+            pid_yaw_angle.clearPID();
+            pid_yaw_vel.clearPID();
+
+            float base_torque = -Adrc_yaw_vel.getU();
+            float cur_yaw_rpm = cur_yaw_vel * 30.0f / 3.1415926f;
+            float vel_err = tar_yaw_vel.x1 - cur_yaw_vel;
+            float ude_comp = 0.0f;
+            if (Gimbal_to_Chassis_Data.getRotatingMode()) // 只有当底盘旋转模式开启时才启用UDE补偿，避免干扰正常控制
+            {
+                ude_comp = yaw_ude.UdeCalcDt(cur_yaw_rpm, base_torque, vel_err, 0.004f);
+            }
+            else
+            {
+                yaw_ude.clear();
+            }
+            float final_torque = base_torque - ude_comp;
+
+            BSP::Motor::DM::Motor4310.ctrl_Mit(2, 0, 0, 0, 0, final_torque);
+
+            // 调试输出（VOFA）
+            //Tools.vofaSend(final_torque, ude_comp, 0, 0, 0, 0, 0, 0, 0, 0);
+        }
+        else if (Now_Status_Serial == GIMBAL::DISABLE)
+        {
+            yaw_ude.clear();
+            pid_yaw_angle.clearPID();
+            pid_yaw_vel.clearPID();
+            BSP::Motor::DM::Motor4310.ctrl_Mit(2, 0, 0, 0, 0, 0);
         }
     }
-}
+
+    void Gimbal::pitchControl()
+    {
+        using namespace APP::Data;
+
+        auto cur_pitch_angle = BSP::IMU::imu.getPitch();            // 角度反馈（deg）
+        auto cur_pitch_vel = BSP::IMU::imu.getGyroX() * 0.0174532f; // 角速度反馈（rad/s）
+        gravity_feedforward = gravity_comp * cosf(cur_pitch_angle * 0.0174532f);
+
+ 
+        if (Now_Status_Serial == GIMBAL::VISION)
+        {
+            auto vision_pitch_target_deg = Communicat::vision.getTarPitch();
+            // 视觉模式：MIT 位置控制
+            auto wrapped_pitch_target_deg =
+                Tools.Zero_crossing_processing(vision_pitch_target_deg, cur_pitch_angle, 360.0f);
+            
+            pid_pitch_angle.setTarget(wrapped_pitch_target_deg * 0.0174532f);
+            float target_pitch_vel =
+                pid_pitch_angle.GetPidPos(Kpid_pitch_angle, cur_pitch_angle * 0.0174532f, 1.0f);
+
+            pid_pitch_vel.setTarget(target_pitch_vel);
+            float target_torque = pid_pitch_vel.GetPidPos(Kpid_pitch_vel, cur_pitch_vel * 0.0174532f, 1.0f);
+
+            BSP::Motor::DM::Motor4310.ctrl_Mit(1, 0 * 0.0174532f, 0, 0, 0, target_pitch_vel + gravity_feedforward);
+        }
+        else if (Now_Status_Serial == GIMBAL::NORMAL || Now_Status_Serial == GIMBAL::KEYBOARD)
+        {
+            // ADRC 速度环 + 重力前馈
+            Adrc_pitch_vel.setTarget(tar_pitch_vel.x1);
+            Adrc_pitch_vel.UpData(cur_pitch_vel);
+
+            float final_torque = Adrc_pitch_vel.getU() + gravity_feedforward;
+
+            BSP::Motor::DM::Motor4310.ctrl_Mit(1, 0, 0, 0, 0, final_torque);
+
+            // 调试输出（VOFA）
+            // Tools.vofaSend(tar_pitch_vel.x1, cur_pitch_vel, Adrc_pitch_vel.getU(), friction_torque,
+            //                gravity_feedforward, final_torque);
+        }
+        else if (Now_Status_Serial == GIMBAL::DISABLE)
+        {
+            BSP::Motor::DM::Motor4310.ctrl_Mit(1, 0, 0, 0, 0, 0);
+        }
+        // Tools.vofaSend(
+        //     pid_yaw_angle.GetCin() * 57.29578f,                    // 1. Yaw 位置环目标(deg)
+        //     BSP::IMU::imu.getYaw(),                                // 2. Yaw 位置环反馈(deg)
+        //     pid_yaw_angle.getOut(),                                // 3. Yaw 速度环目标(rad/s)
+        //     BSP::IMU::imu.getGyroZ() * 0.0174532f,                 // 4. Yaw 速度环反馈(rad/s)
+        //     pid_pitch_angle.GetCin() * 57.29578f,                  // 5. Pitch 位置环目标(deg)
+        //     BSP::IMU::imu.getPitch(),                              // 6. Pitch 位置环反馈(deg)
+        //     Communicat::vision.getFireUpdateCount(),                // 7. 视觉更新计数（用于判断视觉数据是否更新）
+        //     Communicat::vision.get_fire_num(),                      // 8. 视觉目标火力状态（用于判断是否开火）
+        //     -Adrc_yaw_vel.getU(),                                  // 9. Yaw 内环输出
+        //     pid_pitch_vel.getOut() + gravity_feedforward           // 10. Pitch 内环输出
+        // );
+    }
+
+    void Gimbal::sendCan()
+    {
+        // 预留 CAN 发送接口
+    }
+
+    // void Gimbal::TurnAround()
+    // {
+    //     if (is_true_around == true)
+    //     {
+    //         // 一键掉头阶段保持较大角速度
+    //         filter_tar_yaw_vel = 360.0f;
+
+    //         // 超过 500ms 自动结束
+    //         if (HAL_GetTick() - true_around_time > 500)
+    //         {
+    //             is_true_around = false;
+    //             filter_tar_yaw_vel = 0;
+    //         }
+    //     }
+    // }
 
 } // namespace TASK::GIMBAL

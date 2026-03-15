@@ -1,4 +1,4 @@
-#include "RemoteSwitchTask.hpp"
+﻿#include "RemoteSwitchTask.hpp"
 
 #include "../User/APP/KeyBorad/KeyBroad.hpp"
 #include "../User/APP/Mod/RemoteModeManager.hpp"
@@ -11,8 +11,9 @@
 #include "cmsis_os2.h"
 
 /**
- * @brief 直接放在1000hz任务运行的话会出现误判掉线问题，
- *        因为频率过快导致的，所以需要降低频率
+ * @brief 该任务不适合直接放在 1000Hz 任务中运行，
+ *        否则容易因为频率过高出现误判掉线问题，
+ *        因此这里单独降频处理。
  * @param argument
  */
 void keyBoradUpdata();
@@ -42,6 +43,9 @@ void keyBoradUpdata()
 {
     using namespace APP::Key;
     auto *remote = Mode::RemoteModeManager::Instance().getActiveController();
+    static bool keyboard_follow_enabled = true;
+    static bool last_keyboard_mode = false;
+    bool keyboard_mode = remote->isKeyboardMode();
 
     // 底盘方向按键
     auto W = KeyBroad::Instance().getPress(KeyBroad::KEY_W);
@@ -52,11 +56,11 @@ void keyBoradUpdata()
     // 小陀螺切换
     auto X_Press = KeyBroad::Instance().getPress(KeyBroad::KEY_X);
     auto X_LongPress = KeyBroad::Instance().getKeyLongPress(KeyBroad::KEY_X);
-    // 按住shift
-    auto SHIFT = KeyBroad::Instance().getPress(KeyBroad::KEY_SHIFT);
+    // 长按 Shift
+    auto SHIFT = KeyBroad::Instance().getKeyLongPress(KeyBroad::KEY_SHIFT);
     // shift = KeyBroad::Instance().getPress(KeyBroad::KEY_SHIFT);
     shift = SHIFT;
-    // 下降沿加减功率
+    // 按键下降沿加减功率
     auto V = KeyBroad::Instance().getFallingEdge(KeyBroad::KEY_V);
     auto B = KeyBroad::Instance().getFallingEdge(KeyBroad::KEY_B);
 
@@ -65,11 +69,24 @@ void keyBoradUpdata()
 
     // 点击切换视觉模式
 
-    // 一键掉头
-    auto C_TurnAround = KeyBroad::Instance().getKeyClick(KeyBroad::KEY_C);
+    // 点击切换底盘跟随
+    auto C = KeyBroad::Instance().getKeyClick(KeyBroad::KEY_C);
+
+    if (keyboard_mode && !last_keyboard_mode)
+    {
+        keyboard_follow_enabled = true;
+    }
+
+    if (keyboard_mode && C)
+    {
+        keyboard_follow_enabled = !keyboard_follow_enabled;
+    }
+
+    Gimbal_to_Chassis_Data.set_Follow_mode(keyboard_follow_enabled);
+    last_keyboard_mode = keyboard_mode;
 
 
-    //   前进后退
+    // 前进后退
     if (W)
         Gimbal_to_Chassis_Data.set_LY(-1);
     else if (S)
@@ -91,14 +108,14 @@ void keyBoradUpdata()
     else
         Gimbal_to_Chassis_Data.set_Rotating_vel(0);
 
-    // 按住就是shift不是长按，不需要if
+    // 长按生效，不需要额外 if
     Gimbal_to_Chassis_Data.set_Shift(SHIFT);
 
     // 增加功率
     if (V)
         Gimbal_to_Chassis_Data.setPower(10);
 
-    // 减功率
+    // 减少功率
     if (B)
         Gimbal_to_Chassis_Data.setPower(-10);
 
@@ -108,11 +125,6 @@ void keyBoradUpdata()
     {
         Gimbal_to_Chassis_Data.set_UIF5(CTRL);
         Gimbal_to_Chassis_Data.setFly(0);
-    }
-
-    if (C_TurnAround)
-    {
-        TASK::GIMBAL::gimbal.setTrueAround();
     }
 
     static uint8_t vision_mode = 1;
@@ -136,36 +148,33 @@ void BoosterUpState()
 
     auto *remote = Mode::RemoteModeManager::Instance().getActiveController();
 
-    // 点击开启发射机构
+    // 点击开启/关闭摩擦轮
     auto R = KeyBroad::Instance().getKeyClick(KeyBroad::KEY_R);
     auto G = KeyBroad::Instance().getKeyClick(KeyBroad::KEY_G);
 
     static bool booster_enabled = false;
 
-    // 按V键开启，按B键关闭
-    // 按V键开启，按B键关闭
+    // 按 R 键开启，按 G 键关闭
     if (remote->isKeyboardMode())
     {
         if (R)
             booster_enabled = true;
         if (G)
             booster_enabled = false;
+
+        TASK::Shoot::shoot_fsm.setFrictionEnabled(booster_enabled);
     }
     else
     {
         // 遥控器模式：根据开关状态判断是否启用发射机构
         booster_enabled = remote->isLaunchMode();
+        TASK::Shoot::shoot_fsm.setFrictionEnabled(booster_enabled);
     }
 
     // 如果未启用或处于停止模式，则禁用
     if (!booster_enabled || remote->isStopMode())
     {
         TASK::Shoot::shoot_fsm.setNowStatus(TASK::Shoot::Booster_Status::DISABLE);
-    }
-    else if (remote->isRuneMode())
-    {
-        // 左中右上（符节模式）：进入AUTO模式自动发弹
-        TASK::Shoot::shoot_fsm.setNowStatus(TASK::Shoot::Booster_Status::AUTO);
     }
     else if (remote->isVisionFireMode())
     {
@@ -174,7 +183,7 @@ void BoosterUpState()
     }
     else if (remote->isLaunchMode())
     {
-        TASK::Shoot::shoot_fsm.setNowStatus(TASK::Shoot::Booster_Status::ONLY);
+        TASK::Shoot::shoot_fsm.setNowStatus(TASK::Shoot::Booster_Status::AUTO);
     }
     else
     {
@@ -201,3 +210,4 @@ void GimbalUpState()
         TASK::GIMBAL::gimbal.setNowStatus(TASK::GIMBAL::NORMAL);
     }
 }
+

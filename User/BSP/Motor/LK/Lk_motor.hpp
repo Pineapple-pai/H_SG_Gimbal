@@ -97,32 +97,18 @@ namespace BSP::Motor::LK
             this->unit_data_[i].torque_Nm = feedback_[i].current * params.current_to_torque_coefficient;
             this->unit_data_[i].temperature_C = feedback_[i].temperature;
 
-            // 多圈角度计算
-            if (multi_angle_data_[i].allow_accumulate) 
-            {
-                if (!multi_angle_data_[i].is_initialized)
-                {
-                    multi_angle_data_[i].last_angle = this->unit_data_[i].angle_Deg;
-                    multi_angle_data_[i].is_initialized = true;
-                }
-                else
-                {
-                    double last_angle = multi_angle_data_[i].last_angle;
-                    double delta = this->unit_data_[i].angle_Deg - last_angle;
-                    
-                    // 处理360°跳变
-                    if (delta > 180.0) 
-                        delta -= 360.0;
-                    else if (delta < -180.0) 
-                        delta += 360.0;
-                    
-                    multi_angle_data_[i].total_angle += delta;
-                    this->unit_data_[i].add_angle = delta;
-                }
-            }
+            double lastData = this->unit_data_[i].last_angle;
+            double Data = this->unit_data_[i].angle_Deg;
             
-            multi_angle_data_[i].last_angle = this->unit_data_[i].angle_Deg;
-            this->unit_data_[i].last_angle = this->unit_data_[i].angle_Deg;
+            // 多圈角度计算
+            if (Data - lastData < -180) // 正转
+                this->unit_data_[i].add_angle += (360 - lastData + Data) * params.deg_to_real;
+            else if (Data - lastData > 180) // 反转
+                this->unit_data_[i].add_angle += -(360 - Data + lastData) * params.deg_to_real;
+            else
+                this->unit_data_[i].add_angle += (Data - lastData) * params.deg_to_real;
+
+            this->unit_data_[i].last_angle = Data;
         }
 
         HAL::CAN::Frame msd;

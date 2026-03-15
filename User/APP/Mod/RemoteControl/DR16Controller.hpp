@@ -67,7 +67,8 @@ class DR16RemoteController : public IRemoteController
 
     bool isUniversalMode() const override
     {
-        return (dr16.switchLeft() == Dr16::Switch::UP) && (dr16.switchRight() == Dr16::Switch::DOWN);
+        return (dr16.switchLeft() == Dr16::Switch::UP) && (dr16.switchRight() == Dr16::Switch::DOWN)
+        || (dr16.switchLeft() == Dr16::Switch::DOWN) && (dr16.switchRight() == Dr16::Switch::UP);
     }
 
     bool isFollowMode() const override

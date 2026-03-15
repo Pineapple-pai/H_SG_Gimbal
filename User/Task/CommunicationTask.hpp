@@ -21,7 +21,7 @@ class Gimbal_to_Chassis
 
     uint8_t head = 0xA5; // 帧头
     uint8_t len;
-    int16_t Init_Angle = 5;
+    int16_t Init_Angle = -81;
     int16_t target_offset_angle = 0;
 
     // 接收帧头定义
@@ -85,6 +85,8 @@ class Gimbal_to_Chassis
     void set_LX(double LX);
     void set_LY(double LY);
     void set_Rotating_vel(uint8_t Rotating_vel);
+    float set_Rotating_vel() const;
+    void set_Follow_mode(bool Follow);
     void set_UIF5(bool F5);
     void set_Shift(bool Shift);
     void set_MCL(bool MCL);
@@ -104,6 +106,27 @@ class Gimbal_to_Chassis
     uint16_t getBoosterNowHeat()
     {
         return rx_refree.booster_now_heat;
+    }
+
+    bool getRotatingMode() const
+    {
+        return chassis_mode.Rotating_mode;
+    }
+
+    bool getFollowMode() const
+    {
+        return chassis_mode.Follow_mode;
+    }
+
+    float getRotatingVelAbs() const
+    {
+        if (direction.Rotating_vel == 0U)
+        {
+            return 0.0f;
+        }
+
+        const float rotating_vel = (static_cast<float>(direction.Rotating_vel) - 110.0f) / 110.0f;
+        return rotating_vel >= 0.0f ? rotating_vel : -rotating_vel;
     }
 
     void setPower(int8_t power)
@@ -191,6 +214,8 @@ class Vision
 
     bool fire_flag;
     uint32_t fire_num;
+    uint32_t fire_update_count = 0;
+    bool fire_value_initialized = false;
 
     bool vision_flag; // 超过一定范围就置1
 
@@ -238,6 +263,11 @@ class Vision
         return rx_other.fire;
     }
 
+    uint32_t getFireUpdateCount() const
+    {
+        return fire_update_count;
+    }
+
     void setVisionMode(uint8_t mode)
     {
         tx_other.vision_mode = mode;
@@ -272,6 +302,16 @@ inline void Gimbal_to_Chassis::set_LY(double LY)
 inline void Gimbal_to_Chassis::set_Rotating_vel(uint8_t Rotating_vel)
 {
     direction.Rotating_vel = Rotating_vel;
+}
+
+inline float Gimbal_to_Chassis::set_Rotating_vel() const
+{
+    return getRotatingVelAbs();
+}
+
+inline void Gimbal_to_Chassis::set_Follow_mode(bool Follow)
+{
+    chassis_mode.Follow_mode = Follow;
 }
 
 inline void Gimbal_to_Chassis::set_UIF5(bool F5)

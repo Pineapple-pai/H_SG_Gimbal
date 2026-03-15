@@ -32,6 +32,24 @@ Communicat::Vision::Rx_Other debug_rx_other;
 float time_kp = 2.0, time_out, int_time = 5;
 uint32_t demo_time; // 测试时间戳
 
+namespace
+{
+bool send_can_frame_retry(HAL::CAN::ICanDevice &can_dev, const HAL::CAN::Frame &frame,
+                          uint32_t retry_times = 3, uint32_t retry_delay_ms = 1)
+{
+    for (uint32_t i = 0; i < retry_times; ++i)
+    {
+        if (can_dev.send(frame))
+        {
+            return true;
+        }
+        osDelay(retry_delay_ms);
+    }
+
+    return false;
+}
+} // namespace
+
 void CommunicationTask(void *argument)
 {
     for (;;)
@@ -105,7 +123,7 @@ void Gimbal_to_Chassis::Data_send()
     }
 
     chassis_mode.Universal_mode = remote->isUniversalMode();
-    chassis_mode.Follow_mode = remote->isFollowMode();
+    chassis_mode.Follow_mode = remote->isKeyboardMode() ? Gimbal_to_Chassis_Data.getFollowMode() : remote->isFollowMode();
     chassis_mode.Rotating_mode = remote->isRotatingMode();
     chassis_mode.KeyBoard_mode = remote->isKeyboardMode();
 
@@ -114,6 +132,8 @@ void Gimbal_to_Chassis::Data_send()
 
     if (chassis_mode.Rotating_mode)
         direction.Rotating_vel = channel_to_uint8(BSP::Remote::dr16.sw());
+    else
+        direction.Rotating_vel = channel_to_uint8(0.0f);
 
     // Keyboard rotating mode: X long press to enable, release to disable
     static bool is_rotating_enabled = false;
@@ -190,13 +210,13 @@ void Gimbal_to_Chassis::Data_send()
 
     // 获取CAN1设备实例 
     auto& can2 = HAL::CAN::get_can_bus_instance().get_device(HAL::CAN::CanDeviceId::HAL_Can2);
-    if (HAL_CAN_GetTxMailboxesFreeLevel(can2.get_handle()) == 0)
-    {
+    /*
         return;  // 邮箱满，跳过本次发送
     }
 
     // 分两帧通过CAN发送
-    HAL::CAN::Frame frame1;
+    */
+    HAL::CAN::Frame frame1{};
     frame1.id = CAN_G2C_FRAME1_ID;
     frame1.dlc = 8;
     frame1.is_extended_id = false;
@@ -205,9 +225,12 @@ void Gimbal_to_Chassis::Data_send()
     // 第一帧: Head + Direction前7字节 (0-7)
     std::memcpy(can_tx_buffer[0], tx_data, 8);
     std::memcpy(frame1.data, can_tx_buffer[0], 8);
-    can2.send(frame1);
+    if (!send_can_frame_retry(can2, frame1))
+    {
+        return;
+    }
     
-    HAL::CAN::Frame frame2;
+    HAL::CAN::Frame frame2{};
     frame2.id = CAN_G2C_FRAME2_ID;
     frame2.dlc = 8;
     frame2.is_extended_id = false;
@@ -216,7 +239,10 @@ void Gimbal_to_Chassis::Data_send()
     std::memcpy(can_tx_buffer[1], tx_data + 8, 8);  // 剩余8字节数据
 
     std::memcpy(frame2.data, can_tx_buffer[1], 8);
-    can2.send(frame2);
+    if (!send_can_frame_retry(can2, frame2))
+    {
+        return;
+    }
 }
 
 void Gimbal_to_Chassis::HandleCANMessage(uint32_t std_id, uint8_t* data)
@@ -261,9 +287,8 @@ void Vision::Data_send()
     tx_gimbal.quat_z = BSP::IMU::imu.getQuat_z();
 
     tx_other.bullet_rate = 26;
-    tx_other.enemy_color = 0x52; // 0x42我红   0X52我蓝
-
-    tx_other.tail = 0xFF; // 准备标志位
+    tx_other.enemy_color = 0x52;
+    tx_other.tail = 0xFF;
 
     Tx_pData[0] = frame.head_one;
     Tx_pData[1] = frame.head_two;
@@ -274,7 +299,7 @@ void Vision::Data_send()
     std::memcpy(&Tx_pData[14], &tx_gimbal.quat_z, sizeof(float));
 
     Tx_pData[18] = tx_other.bullet_rate;
-    Tx_pData[19] = tx_other.enemy_color; // 0x42红   0X52蓝色
+    Tx_pData[19] = tx_other.enemy_color;
     Tx_pData[20] = tx_other.vision_mode;
     Tx_pData[21] = tx_other.tail;
 
@@ -326,12 +351,22 @@ void Vision::dataReceive()
         //		else
         //			vision_flag = true;
 
-        yaw_angle_ = rx_target.yaw_angle + BSP::Motor::DM::Motor4310.getAngleDeg(2);
-        pitch_angle_ = rx_target.pitch_angle + BSP::Motor::DM::Motor4310.getAngleDeg(1);
-        //pitch_angle_ *= -1.0; // 每台方向不同
-        //yaw_angle_ *= -1.0;
+        yaw_angle_ = (rx_target.yaw_angle); //+ BSP::Motor::DM::Motor4310.getAngleDeg(2);
+        pitch_angle_ = (rx_target.pitch_angle); //+ BSP::Motor::DM::Motor4310.getAngleDeg(1);
+        pitch_angle_ *= -1.0; // 每台方向不同
+        yaw_angle_ *= -1.0;
 
-        rx_other.fire = (Rx_pData[11]);
+        uint8_t new_fire = Rx_pData[11];
+        if (!fire_value_initialized)
+        {
+            rx_other.fire = new_fire;
+            fire_value_initialized = true;
+        }
+        else if (new_fire != rx_other.fire)
+        {
+            rx_other.fire = new_fire;
+            ++fire_update_count;
+        }
         rx_other.tail = Rx_pData[12];
         rx_other.aim_x = Rx_pData[17];
         rx_other.aim_y = Rx_pData[18];
