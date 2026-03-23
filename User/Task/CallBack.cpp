@@ -33,8 +33,8 @@ extern "C" void HAL_CAN_RxFifo1MsgPendingCallback(CAN_HandleTypeDef *hcan)
     {
         can2.receive(rx_frame2);  // receive()内部会自动触发所有注册的回调
 	    BSP::Motor::Dji::Motor2006.Parse(rx_frame2);
-		BSP::Motor::Dji::Motor3508.Parse(rx_frame2);
-        Gimbal_to_Chassis_Data.HandleCANMessage(rx_frame2.id, rx_frame2.data);    
+			BSP::Motor::Dji::Motor3508.Parse(rx_frame2);
+      Gimbal_to_Chassis_Data.HandleCANMessage(rx_frame2.id, rx_frame2.data, rx_frame2.dlc);
       
     }
 }

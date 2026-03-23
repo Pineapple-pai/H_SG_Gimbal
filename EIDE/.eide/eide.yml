@@ -121,7 +121,11 @@ virtualFolder:
         - path: ../User/BSP/Remote/Mini/Mini.cpp
         - path: ../User/BSP/Remote/Dbus/Dbus.cpp
         - path: ../User/BSP/Motor/DM/DmMotor.hpp
-      folders: []
+      folders:
+        - name: CRC
+          files:
+            - path: ../User/BSP/CRC/crc.cpp
+          folders: []
     - name: APP
       files:
         - path: ../User/APP/Buzzer.cpp
@@ -144,10 +148,6 @@ virtualFolder:
       files:
         - path: ../User/Algorithm/PID.cpp
         - path: ../User/Algorithm/LADRC/Adrc.cpp
-      folders: []
-    - name: CRC
-      files:
-        - path: ../User/BSP/CRC/crc.cpp
       folders: []
     - name: DWT
       files:

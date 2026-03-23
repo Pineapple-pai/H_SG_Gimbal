@@ -127,13 +127,13 @@ private:
     
     // ==================== 射击控制参数 ====================
     uint32_t fireCount = 0;     ///< 发射计数
-    float targetFire = 20.0f;   ///< 目标发射频率 (Hz)
-    float currentFire = 20.0f;  ///< 当前允许发射频率 (Hz)  
+    float targetFire = 25.0f;   ///< 目标发射频率 (Hz)
+    float currentFire = 25.0f;  ///< 当前允许发射频率 (Hz)  
     
     // ==================== 热量阈值 ====================
-    float heatLimitSnubber = 60.0f;  ///< 热量缓冲区（开始降频的阈值）
+    float heatLimitSnubber = 80.0f;  ///< 热量缓冲区（开始降频的阈值）
     float heatLimitStop = 20.0f;     ///< 停止发射阈值（剩余热量）
-    static constexpr float CUR_VEL_THRESHOLD = 5900.0f;  ///< 摩擦轮速度差阈值
+    static constexpr float CUR_VEL_THRESHOLD = 6000.0f;  ///< 摩擦轮速度差阈值
     
     // ==================== 时间相关 ====================
     uint32_t boosterTime = 0;  ///< 发射机构运行时间

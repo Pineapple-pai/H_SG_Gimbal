@@ -19,7 +19,9 @@ float tar_angle = 0.0f;
 uint32_t Send_ms = 0;
 int16_t debug_limit = 200;
 int16_t debug_cooling = 40;
-int16_t test_fire = 0;
+float test_fire =1;
+
+
 
 void ShootTask(void *argument)
 {
@@ -55,7 +57,7 @@ namespace TASK::Shoot
 // 构造函数
 Class_ShootFSM::Class_ShootFSM()
     : adrc_Dail_vel(Alg::LADRC::TDquadratic(200, 0.001), 5, 40, 0.9, 0.001, 16384),
-      Heat_Limit(10, 35.0f)
+      Heat_Limit(12, 35.0f)
 {
     // 初始化卡弹检测状态机
     JammingFMS.Set_Status(Jamming_Status::NORMAL);
@@ -136,7 +138,7 @@ void Class_StopFireFSM::UpState(float current_torque, float time_elapsed_sec)
     Status[Now_Status_Serial].Count_Time++;
 
     // 1 秒阈值（以 5ms 周期估算）
-    const uint32_t timeout_counts = 200;
+    const uint32_t timeout_counts = 250;
 
     switch (Now_Status_Serial)
     {
@@ -205,6 +207,12 @@ void Class_JammingFSM::UpState()
 void Class_ShootFSM::UpState()
 {
     const bool right_switch_is_up = (BSP::Remote::dr16.switchRight() == BSP::Remote::Dr16::Switch::UP);
+
+    if (Now_Status_Serial != Booster_Status::AUTO)
+    {
+        last_auto_vision_fire_flag = false;
+    }
+
     switch (Now_Status_Serial)
     {
     case (Booster_Status::DISABLE): {
@@ -260,7 +268,7 @@ void Class_ShootFSM::UpState()
 
             if (is_long_press_auto)
             {
-                float auto_fire_hz = 15.0f;
+                float auto_fire_hz = 8.0f;
                 auto_fire_hz = Tools.clamp(auto_fire_hz, Heat_Limit.getCurrentFireRate(), 0.0f);
 
                 float angle_per_frame = hz_to_angle(auto_fire_hz);
@@ -444,7 +452,7 @@ void Class_ShootFSM::Jamming(float angle, float err)
     // 1. 反转解卡阶段（持续约 200ms）
     if (is_jammed)
     {
-        target_Dail_torque = -5000;
+        target_Dail_torque = -3000;
         Dail_target_pos = angle; // 防止位置环积分继续累积
 
         if (HAL_GetTick() - timer > 200)
@@ -462,7 +470,7 @@ void Class_ShootFSM::Jamming(float angle, float err)
         return;
 
     // 3. 卡弹判据：力矩大、误差大且角度几乎不变
-    if (fabs(target_Dail_torque) > 8000 && fabs(err) > 30 && fabs(angle - last_angle) < 10)
+    if (fabs(target_Dail_torque) > 5000 && fabs(err) > 30 && fabs(angle - last_angle) < 10)
     {
         jam_count++;
         // 连续两次命中才触发，防止单发瞬态误触

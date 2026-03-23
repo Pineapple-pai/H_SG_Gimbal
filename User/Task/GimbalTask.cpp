@@ -15,6 +15,8 @@
 #include "can.h"
 #include "cmsis_os2.h"
 #include "../math.h"
+#include "../APP/Heat_Detector/Heat_Control.hpp"
+#include "../Task/ShootTask.hpp"
 // ===== 云台控制参数 =====
 // Pitch 轴 MIT 参数
 float pitch_Kp = 0.0f;
@@ -39,7 +41,7 @@ static constexpr float YAW_INIT_ANGLE = 88.0f;
 static constexpr float DEG_TO_RAD = 0.0174532f;
 
 // Pitch 重力补偿
-float gravity_comp = 1.25f;
+float gravity_comp = 1.15f;
 float gravity_feedforward = 0.0f;
 
 void GimbalTask(void *argument)
@@ -131,7 +133,7 @@ namespace TASK::GIMBAL
         {
             // 键鼠模式
             filter_tar_yaw_vel = remote->getMouseVelX() * 1500;
-            fliter_pitch_vel = -remote->getMouseVelY() * 1500;
+            fliter_pitch_vel = -remote->getMouseVelY() * 2500;
             //TurnAround();
             break;
         }
@@ -183,10 +185,10 @@ namespace TASK::GIMBAL
             float target_yaw_vel =
                 pid_yaw_angle.GetPidPos(Kpid_yaw_angle, cur_yaw_angle_deg * DEG_TO_RAD, 3.0f);
 
-            Adrc_yaw_vel.setTarget(target_yaw_vel);
-            Adrc_yaw_vel.UpData(cur_yaw_vel);
+            Adrc_yaw_vision.setTarget(target_yaw_vel);
+            Adrc_yaw_vision.UpData(cur_yaw_vel);
 
-            float target_torque = Tools.clamp(-Adrc_yaw_vel.getU(), 3.0f, -3.0f);
+            float target_torque = Tools.clamp(-Adrc_yaw_vision.getU(), 3.0f, -3.0f);
 
             BSP::Motor::DM::Motor4310.ctrl_Mit(2, 0, 0, 0, 0, target_torque);
   
@@ -241,7 +243,7 @@ namespace TASK::GIMBAL
         if (Now_Status_Serial == GIMBAL::VISION)
         {
             auto vision_pitch_target_deg = Communicat::vision.getTarPitch();
-            // 视觉模式：MIT 位置控制
+            // 视觉模式：角度 PID 外环 + 速度 ADRC 内环
             auto wrapped_pitch_target_deg =
                 Tools.Zero_crossing_processing(vision_pitch_target_deg, cur_pitch_angle, 360.0f);
             
@@ -249,10 +251,11 @@ namespace TASK::GIMBAL
             float target_pitch_vel =
                 pid_pitch_angle.GetPidPos(Kpid_pitch_angle, cur_pitch_angle * 0.0174532f, 1.0f);
 
-            pid_pitch_vel.setTarget(target_pitch_vel);
-            float target_torque = pid_pitch_vel.GetPidPos(Kpid_pitch_vel, cur_pitch_vel * 0.0174532f, 1.0f);
+            Adrc_pitch_vision.setTarget(target_pitch_vel);
+            Adrc_pitch_vision.UpData(cur_pitch_vel);
+            float target_torque = Adrc_pitch_vision.getU() + gravity_feedforward;
 
-            BSP::Motor::DM::Motor4310.ctrl_Mit(1, 0 * 0.0174532f, 0, 0, 0, target_pitch_vel + gravity_feedforward);
+            BSP::Motor::DM::Motor4310.ctrl_Mit(1, 0, 0, 0, 0, target_torque);
         }
         else if (Now_Status_Serial == GIMBAL::NORMAL || Now_Status_Serial == GIMBAL::KEYBOARD)
         {
@@ -272,21 +275,21 @@ namespace TASK::GIMBAL
         {
             BSP::Motor::DM::Motor4310.ctrl_Mit(1, 0, 0, 0, 0, 0);
         }
-        // Tools.vofaSend(
-        //     pid_yaw_angle.GetCin() * 57.29578f,                    // 1. Yaw 位置环目标(deg)
-        //     BSP::IMU::imu.getYaw(),                                // 2. Yaw 位置环反馈(deg)
-        //     pid_yaw_angle.getOut(),                                // 3. Yaw 速度环目标(rad/s)
-        //     BSP::IMU::imu.getGyroZ() * 0.0174532f,                 // 4. Yaw 速度环反馈(rad/s)
-        //     pid_pitch_angle.GetCin() * 57.29578f,                  // 5. Pitch 位置环目标(deg)
-        //     BSP::IMU::imu.getPitch(),                              // 6. Pitch 位置环反馈(deg)
-        //     Communicat::vision.getFireUpdateCount(),                // 7. 视觉更新计数（用于判断视觉数据是否更新）
-        //     Communicat::vision.get_fire_num(),                      // 8. 视觉目标火力状态（用于判断是否开火）
-        //     -Adrc_yaw_vel.getU(),                                  // 9. Yaw 内环输出
-        //     pid_pitch_vel.getOut() + gravity_feedforward           // 10. Pitch 内环输出
-        // );
+      Tools.vofaSend(
+          pid_yaw_angle.GetCin() * 57.29578f,                    // 1. Yaw 位置环目标(deg)
+          BSP::IMU::imu.getYaw(),                                // 2. Yaw 位置环反馈(deg)
+          pid_yaw_angle.getOut(),                                // 3. Yaw 速度环目标(rad/s)
+          BSP::IMU::imu.getGyroZ() * 0.0174532f,                 // 4. Yaw 速度环反馈(rad/s)
+          pid_pitch_angle.GetCin() * 57.29578f,                  // 5. Pitch 位置环目标(deg)
+          BSP::IMU::imu.getPitch(),                              // 6. Pitch 位置环反馈(deg)
+          pid_pitch_angle.getOut(),                               // 7. Pitch 速度环目标(rad/s)】
+          BSP::IMU::imu.getGyroX() * 0.0174532,                    // 8. Pitch 速度环反馈(rad/s)
+          Communicat::vision.getFireUpdateCount(),                // 9. 视觉更新计数（用于判断视觉数据是否更新）
+          Gimbal_to_Chassis_Data.getLaunchSpeed()          // 10. 当前累计发弹
+      );
     }
 
-    void Gimbal::sendCan()
+    void Gimbal::sendCan()  
     {
         // 预留 CAN 发送接口
     }

@@ -57,9 +57,8 @@ void keyBoradUpdata()
     auto X_Press = KeyBroad::Instance().getPress(KeyBroad::KEY_X);
     auto X_LongPress = KeyBroad::Instance().getKeyLongPress(KeyBroad::KEY_X);
     // 长按 Shift
-    auto SHIFT = KeyBroad::Instance().getKeyLongPress(KeyBroad::KEY_SHIFT);
-    // shift = KeyBroad::Instance().getPress(KeyBroad::KEY_SHIFT);
-    shift = SHIFT;
+    auto Shift_Press = KeyBroad::Instance().getPress(KeyBroad::KEY_SHIFT);
+    auto Shift_LongPress = KeyBroad::Instance().getKeyLongPress(KeyBroad::KEY_SHIFT);
     // 按键下降沿加减功率
     auto V = KeyBroad::Instance().getFallingEdge(KeyBroad::KEY_V);
     auto B = KeyBroad::Instance().getFallingEdge(KeyBroad::KEY_B);
@@ -104,12 +103,15 @@ void keyBoradUpdata()
 
     // 小陀螺
     if (X_Press && X_LongPress)
-        Gimbal_to_Chassis_Data.set_Rotating_vel(220);
+        Gimbal_to_Chassis_Data.set_Rotating_vel(330);
     else
         Gimbal_to_Chassis_Data.set_Rotating_vel(0);
 
-    // 长按生效，不需要额外 if
-    Gimbal_to_Chassis_Data.set_Shift(SHIFT);
+    // Shift 开超电
+    if(Shift_Press && Shift_LongPress)
+        Gimbal_to_Chassis_Data.set_Shift(1);
+    else
+        Gimbal_to_Chassis_Data.set_Shift(0);
 
     // 增加功率
     if (V)

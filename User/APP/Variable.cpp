@@ -14,27 +14,30 @@ TD Yaw_out(0);
 TD shoot_vel_Left(100);
 TD shoot_vel_Right(100);
 
-Kpid_t Kpid_yaw_angle(0.0, 0.0, 0.0);
+Kpid_t Kpid_yaw_angle(20.0, 0.0, 0.0);
 Kpid_t Kpid_yaw_vel(0.0, 0.0, 0.0);
 
 PID pid_yaw_angle(0.0, 0.0);
 PID pid_yaw_vel(0.0, 0.0);
 
-Kpid_t Kpid_pitch_angle(0.0, 0.0, 0.0);
+Kpid_t Kpid_pitch_angle(30.0, 0.0, 0.0);
 Kpid_t Kpid_pitch_vel(0.0, 0.0, 0.0);
 
-PID pid_pitch_angle(0.0, 0.0);
+PID pid_pitch_angle(0.1, 1.0);
 PID pid_pitch_vel(0.0, 0.0);
 
-Ude yaw_ude(1.0, 3.0, 2.0, 0.5);
+Ude yaw_ude(1.0, 3.0, 2.0, 2.0);
 
 Kpid_t Kpid_Friction_L_vel(0, 0, 0);
 Kpid_t Kpid_Friction_R_vel(0, 0, 0);
-PID pid_Friction_L_vel(0.0, 0.0);
+PID pid_Friction_L_vel(0.0, 0.0);	
 PID pid_Friction_R_vel(0.0, 0.0);
 
-Alg::LADRC::Adrc Adrc_yaw_vel(Alg::LADRC::TDquadratic(200, 0.004), 10, 0.0, 25.0, 20.0, 0.004, 3.5);
-Alg::LADRC::Adrc Adrc_pitch_vel(Alg::LADRC::TDquadratic(200, 0.004), 10, 0.0, 35.0, 20.0, 0.004, 3.5);
+Alg::LADRC::Adrc Adrc_yaw_vel(Alg::LADRC::TDquadratic(200, 0.004), 5, 0.0, 35.0, 22.0, 0.004, 3.5);
+Alg::LADRC::Adrc Adrc_pitch_vel(Alg::LADRC::TDquadratic(200, 0.004), 8, 0.0, 35.0, 20.0, 0.004, 3.5);
+
+Alg::LADRC::Adrc Adrc_yaw_vision(Alg::LADRC::TDquadratic(200, 0.004), 8.0, 0.0, 35.0, 15.0, 0.004, 3.5);
+Alg::LADRC::Adrc Adrc_pitch_vision(Alg::LADRC::TDquadratic(200, 0.004), 8.0, 0.0, 35.0, 20.0, 0.004, 3.5);
 
 Alg::LADRC::Adrc Adrc_Friction_L(Alg::LADRC::TDquadratic(100, 0.005), 10.0, 1.2, 20, 1.0, 0.004, 16384);
 Alg::LADRC::Adrc Adrc_Friction_R(Alg::LADRC::TDquadratic(100, 0.005), 10.0, 1.2, 20, 1.0, 0.004, 16384);
